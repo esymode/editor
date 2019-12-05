@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@master
       - name: Publish
-        uses: cloudflare/serverless-action@v1.1
+        uses: cloudflare/wrangler-action@1.0.0
         with:
           apiKey: ${{ secrets.CF_API_KEY }}
           email: ${{ secrets.CF_EMAIL }}
