@@ -1,0 +1,8 @@
+name = "editor"
+type = "webpack"
+account_id = "3b97454ba8bd49168157a3af48398b30"
+workers_dev = true
+
+[site]
+bucket = "./dist"
+entry-point = "workers-site"
