@@ -6,32 +6,24 @@ on:
       - master
 
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [12.x]
-
-    steps:
-    - uses: actions/checkout@v1
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v1
-      with:
-        node-version: ${{ matrix.node-version }}
-    - name: npm install, build, and test
-      run: |
-        npm ci
-        npm run build --if-present
-      env:
-        CI: true
-
   deploy:
     runs-on: ubuntu-latest
     name: Deploy
+    strategy:
+      matrix:
+        node-version: [12.x]
+  
     steps:
       - uses: actions/checkout@master
+      - uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: npm install, build
+        run: |
+          npm ci
+          npm run build --if-present
+        env:
+          CI: true
       - name: Publish
         uses: cloudflare/wrangler-action@1.0.0
         with:
