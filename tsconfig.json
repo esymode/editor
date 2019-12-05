@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "es2019",
+    "module": "esnext",
+    "outDir": "dist",
+    "jsx": "react",
+    "jsxFactory": "h",
+    "removeComments": false,
+    "sourceMap": true,
+    "lib": ["webworker", "dom", "es2019.object"],
+    "moduleResolution": "node",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "strictNullChecks": true,
+    "strict": true,
+    "baseUrl": "./"
+  },
+  "exclude": ["node_modules", "__tests__", "**/__tests__", "src/__tests__"]
+}
