@@ -9,24 +9,26 @@ type FolderEntry = {
 };
 
 type SemVer = string; // TODO
-
 type Version = string; // TODO
-// Represents a [name, version]
-type EncodedNameAndVersion = string;
+type Name = string; // TODO
 
 type DepsLock = {
-  // react: 16.11.0
-  explicit: { [name: string]: Version };
-  // { "react@16.11.0": ["scheduler", "1.2.3"] }
-  thirdParty: { [source: string]: /*EncodedNameAndVersion*/ [string, Version] };
+  [nameAndSemver: string]: {
+    name: Name,
+    version: Version
+  }
 };
 
 type Workspace = {
+  // 1
+  version: number;
+  
   // index.ts -> content
   files: FolderEntry;
 
   // react: "^16.9.0"
   explicitDeps: { [packageName: string]: SemVer };
 
+  // "react@^16.9.0": { name: "react", "version": "16.11.0" }
   depsLock: DepsLock;
 };
