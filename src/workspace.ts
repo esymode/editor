@@ -14,15 +14,15 @@ type Name = string; // TODO
 
 type DepsLock = {
   [nameAndSemver: string]: {
-    name: Name,
-    version: Version
-  }
+    name: Name;
+    version: Version;
+  };
 };
 
 type Workspace = {
   // 1
   version: number;
-  
+
   // index.ts -> content
   files: FolderEntry;
 
