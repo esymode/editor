@@ -141,6 +141,31 @@ export const match: MatchFunc = ((
   throw new Error("object was not a result nor an option obj");
 }) as any;
 
+export type UnsafeUnwrapFunc = {
+  <A>(opt: Option<A>): A;
+  <A, E>(res: Result<A, E>): A;
+};
+
+export const unsafeUnwrap: UnsafeUnwrapFunc = ((val: unknown) => {
+  if (isOption(val)) {
+    if (val.tag === "Some") {
+      return val.val;
+    }
+    throw new Error(`unwrap(None)`);
+  }
+
+  if (isResult(val)) {
+    if (val.tag === "Ok") {
+      // TS bug?
+      return (val as any).val;
+    }
+    // TS bug?
+    throw new Error(`unwrap(Err(${(val as any).err}))`);
+  }
+
+  throw new Error("object was not a result nor an option obj");
+}) as any;
+
 //-------------- Pipe & PipeVal ---------------------
 
 export interface Fn<T, R> {

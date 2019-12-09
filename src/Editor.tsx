@@ -1,12 +1,25 @@
 import * as React from "react";
+import { useEffect, useState, useReducer } from "react";
 
 import { css } from "emotion";
 
-import { useReducer } from "react";
 import { FilesPanel } from "./sidePanel/FilesPanel";
-import { Evt, createProjectFiles, updateProjectModel } from "./projectModel";
+import {
+  Evt,
+  createProjectFiles,
+  updateProjectModel,
+  isFile,
+  FileItem,
+  unsafeGetItem
+} from "./projectModel";
 import { Preview } from "./preview";
 import { EditorAndTabs } from "./editor_space/EditorAndTabs";
+import { doPackageResolution } from "./packaging/doResolution";
+import { DepsLock } from "./workspace";
+import { PackageJSON } from "./packaging/packageResolution";
+import { fetchFileFromUnpkg, bundle } from "./packaging/bundling";
+import { unsafeUnwrap, map, Result, allResult } from "./functionalNonsense";
+import { normalizePath } from "./normalizedPath";
 // import { PackageJSON } from "./virtual-path-types";
 
 const init = () => {
@@ -25,7 +38,63 @@ const initial = init();
 export const IDE: React.FC = () => {
   const [projectModel, dispatch] = useReducer(updateProjectModel, initial);
 
-  // console.log("IDE render model=", projectModel);
+  const [bundlingData, setBundlingData] = useState<
+    [DepsLock, Map<string, PackageJSON>] | undefined
+  >(undefined);
+
+  const [previewSource, setPreviewSource] = useState("");
+
+  const explicitDeps = {
+    react: "^16.9.0",
+    "react-dom": "^16.9.0"
+  };
+
+  useEffect(() => {
+    let abort = false;
+    doPackageResolution(explicitDeps).then(async lock => {
+      if (lock.tag !== "Ok") {
+        console.warn("Failed to generate lock; aborting");
+        return;
+      }
+
+      const packageJsons: Result<
+        Map<string, PackageJSON>,
+        string
+      > = await Promise.all(
+        Object.entries(lock.val).map(
+          async ([specifier, version]): Promise<
+            Result<[string, PackageJSON], string>
+          > => {
+            const name = specifier.substring(0, specifier.indexOf("@"));
+            return await fetchFileFromUnpkg({
+              type: "node_module",
+              name,
+              version,
+              path: unsafeUnwrap(normalizePath("package.json"))
+            }).then(result =>
+              map(result, s => [`${name}@${version}`, JSON.parse(s)])
+            );
+          }
+        )
+      )
+        .then(allResult)
+        .then(pairs => map(pairs, ps => new Map(ps)));
+
+      if (packageJsons.tag !== "Ok") {
+        console.warn("Failed to fetch packageJsons; aborting");
+        return;
+      }
+
+      if (abort) {
+        return;
+      }
+
+      setBundlingData([lock.val, packageJsons.val]);
+    });
+    return () => {
+      abort = true;
+    };
+  }, []);
 
   return (
     <div className={containerLayout}>
@@ -35,18 +104,58 @@ export const IDE: React.FC = () => {
         project={projectModel}
         layoutFromParentStyle={editorContent}
       />
-      <Preview source={source} className={previewStyle}></Preview>
+      <div className={previewStyle}>
+        {bundlingData ? (
+          <button
+            onClick={async () => {
+              const [lock, packageJsons] = bundlingData;
+
+              // TODO: Handle nested files
+              const files = unsafeGetItem(
+                projectModel.folders,
+                projectModel.rootId
+              )
+                .children.filter(isFile)
+                .map(fileId => {
+                  const name = unsafeGetItem(projectModel.files, fileId).name;
+                  const content = unsafeGetItem(projectModel.sources, fileId);
+                  return {
+                    // TODO: Add TS transpilation.
+                    name: name.substring(0, name.length - 2) + "js",
+                    content
+                  };
+                });
+
+              const output = await bundle(
+                files,
+                "index.js",
+                lock,
+                packageJsons,
+                explicitDeps
+              );
+
+              if (output.tag === "Ok") {
+                setPreviewSource(output.val);
+              } else {
+                setPreviewSource(
+                  `document.body.innerText = "Bundle error: " + ${output.err}`
+                );
+              }
+            }}
+          >
+            Run
+          </button>
+        ) : (
+          <button disabled>Run</button>
+        )}
+        <Preview source={previewSource} className={previewStyle}></Preview>
+      </div>
       <div className={leftPanelStyle}>
         <FilesPanel projectFiles={projectModel} dispatch={dispatch} />
       </div>
     </div>
   );
 };
-
-const source = `const helloWorld = document.createElement("span");
-helloWorld.innerText = "hello world";
-document.body.appendChild(helloWorld);
-console.log({ helloWorld });`;
 
 // const editorStyle = css({
 //   width: "100%",

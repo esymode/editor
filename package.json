@@ -26,14 +26,15 @@
   },
   "dependencies": {
     "@types/semver": "^6.2.0",
+    "@types/rollup": "^0.54.0",
     "emotion": "^10.0.23",
     "immutable": "^4.0.0-rc.12",
     "monaco-editor": "^0.19.0",
     "react": "16.12.0",
     "react-dom": "16.12.0",
     "react-icons": "^3.8.0",
-    "rollup-plugin-commonjs-fork": "git+https://git@github.com/esymode/rollup-plugin-commonjs-fork.git",
     "semver": "^7.1.1",
+    "rollup-plugin-commonjs-fork": "git+https://git@github.com/esymode/rollup-plugin-commonjs-fork.git#11c8e966f58e3699ea9c800949e53bf19f980e19",
     "ts-binary-types": "^0.8.0",
     "ts-union": "^2.1.1"
   },

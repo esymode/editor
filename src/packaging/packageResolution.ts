@@ -3,6 +3,9 @@ import * as maxSatisfying from "semver/ranges/max-satisfying";
 import { Err, Ok, allResult } from "../functionalNonsense";
 
 export type PackageJSON = {
+  es2015?: string;
+  module?: string;
+  main?: string;
   dependencies?: {
     [name: string]: SemVerRange;
   };
