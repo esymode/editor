@@ -14,7 +14,8 @@
     "tslib": "1.10.0"
   },
   "dependencies": {
-    "preact": "^10.0.5"
+    "preact": "^10.0.5",
+    "ts-binary-types": "^0.8.0"
   },
   "scripts": {
     "build": "npx rollup -c",
