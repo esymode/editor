@@ -3,7 +3,6 @@ import {
   workerRpcClient,
   workerRpcImpl as hostWorkerRpc
 } from "./rpc_webworker";
-import { ProtocolImpl } from "./rpc_definition";
 
 const Workspace = Str;
 
@@ -19,14 +18,18 @@ const worker: Worker = null as any;
 const client = workerRpcClient(syncProtocol, worker, port);
 
 client.getVersion().then(version => console.log(version));
+client.saveWorkspace("content").then(() => console.log("saved"));
 
 // worker
-const impl: ProtocolImpl<typeof syncProtocol> = {
-  getVersion: () => 444,
-  saveWorkspace: workspase => {
-    console.log(workspase);
-    return Promise.resolve();
-  }
-};
-
-hostWorkerRpc(impl, port);
+hostWorkerRpc(
+  syncProtocol,
+  {
+    getVersion: () => 444,
+    saveWorkspace: workspase => {
+      console.log(workspase);
+      return Promise.resolve();
+    }
+  },
+  worker, // actually in worker context this is 'self'
+  port
+);

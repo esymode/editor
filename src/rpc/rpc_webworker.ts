@@ -1,6 +1,7 @@
 import { ProtocolClient, ProtocolDef, ProtocolImpl } from "./rpc_definition";
 
 type MsgRequest = {
+  isRequest: true;
   portId: number;
   funcName: string;
   msgId: number;
@@ -8,6 +9,7 @@ type MsgRequest = {
 };
 
 type MsgResponse = {
+  isRequest: false;
   portId: number;
   msgId: number;
   response?: unknown;
@@ -15,17 +17,20 @@ type MsgResponse = {
 
 export const workerRpcClient = <Def extends ProtocolDef>(
   definition: Def,
-  worker: Worker,
+  workerApi: WorkerLikeApi,
   portId: number
 ): ProtocolClient<Def> => {
   const map = new Map<number, (data?: unknown) => void>();
 
-  worker.addEventListener("message", ({ data }) => {
-    const { portId: respPortId, response, msgId }: MsgResponse = JSON.parse(
-      data
-    );
+  workerApi.addEventListener("message", ({ data }) => {
+    const {
+      portId: respPortId,
+      response,
+      msgId,
+      isRequest
+    }: MsgResponse = JSON.parse(data);
 
-    if (respPortId !== portId) return;
+    if (respPortId !== portId || isRequest) return;
 
     const respCallback = map.get(msgId);
     if (!respCallback) {
@@ -46,11 +51,11 @@ export const workerRpcClient = <Def extends ProtocolDef>(
     onResponse: (response?: unknown) => void,
     arg?: unknown
   ) => {
-    const req: MsgRequest = { funcName, msgId, portId, arg };
+    const req: MsgRequest = { isRequest: true, funcName, msgId, portId, arg };
 
     map.set(msgId, onResponse);
     msgId += 1;
-    worker.postMessage(JSON.stringify(req));
+    workerApi.postMessage(JSON.stringify(req));
   };
 
   return Object.fromEntries(
@@ -66,15 +71,21 @@ export const workerRpcClient = <Def extends ProtocolDef>(
 };
 
 export const workerRpcImpl = <Def extends ProtocolDef>(
+  _def: Def,
   impl: ProtocolImpl<Def>,
+  workerApi: WorkerLikeApi,
   portId: number
 ) => {
-  addEventListener("message", ({ data }) => {
-    const { portId: respPortId, arg, funcName, msgId }: MsgRequest = JSON.parse(
-      data
-    );
+  workerApi.addEventListener("message", ({ data }) => {
+    const {
+      portId: respPortId,
+      arg,
+      funcName,
+      msgId,
+      isRequest
+    }: MsgRequest = JSON.parse(data);
 
-    if (respPortId !== portId) return;
+    if (respPortId !== portId || !isRequest) return;
 
     if (!(funcName in impl)) {
       throw new Error(
@@ -84,8 +95,13 @@ export const workerRpcImpl = <Def extends ProtocolDef>(
 
     const resp = impl[funcName](arg);
     const send = (response?: unknown) => {
-      const respMsg: MsgResponse = { portId, msgId, response };
-      postMessage(JSON.stringify(respMsg));
+      const respMsg: MsgResponse = {
+        portId,
+        msgId,
+        response,
+        isRequest: false
+      };
+      workerApi.postMessage(JSON.stringify(respMsg));
     };
 
     if (resp instanceof Promise) {
@@ -95,3 +111,8 @@ export const workerRpcImpl = <Def extends ProtocolDef>(
     }
   });
 };
+
+export type WorkerLikeApi = Pick<
+  Worker,
+  "addEventListener" | "postMessage" | "removeEventListener"
+>;
