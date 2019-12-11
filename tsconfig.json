@@ -4,7 +4,7 @@
     "module": "esnext",
     "outDir": "dist",
     "jsx": "react",
-    "jsxFactory": "h",
+    // "jsxFactory": "h",
     "removeComments": false,
     "sourceMap": true,
     "lib": ["webworker", "dom", "es2019.object"],
@@ -15,7 +15,13 @@
     "noImplicitReturns": true,
     "strictNullChecks": true,
     "strict": true,
-    "baseUrl": "./"
+    "baseUrl": "./",
+    "plugins": [
+      {
+        "name": "typescript-styled-plugin",
+        "tags": ["styled", "css"]
+      }
+    ]
   },
   "exclude": ["node_modules", "__tests__", "**/__tests__", "src/__tests__"]
 }
