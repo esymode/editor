@@ -1,12 +1,7 @@
-import {
-  DepsLock,
-  SemVer as SemVerRange,
-  ExplicitDeps,
-  Version
-} from "./workspace";
+import { DepsLock, SemVerRange, ExplicitDeps, Version } from "../workspace";
 
 export type PackageJSON = {
-  dependencies: {
+  dependencies?: {
     [name: string]: SemVerRange;
   };
 };
@@ -108,7 +103,7 @@ export const lockFromExplicitDeps = (
   const newSemverRangesToResolve: ResolveSemverRequest[] = dedupe(
     ([] as [string, SemVerRange][])
       .concat(
-        ...step.fetchedPackageJsonRequests.map(([, { dependencies }]) =>
+        ...step.fetchedPackageJsonRequests.map(([, { dependencies = {} }]) =>
           Object.entries(dependencies)
         )
       )
@@ -169,6 +164,6 @@ export const lockFromExplicitDeps = (
     state: (newInternalState as unknown) as PackageResolutionState
   };
 };
-function versionedPackage(name: string, semver: string) {
-  return `${name}@${semver}`;
-}
+
+export const versionedPackage = (name: string, semver: string) =>
+  `${name}@${semver}`;

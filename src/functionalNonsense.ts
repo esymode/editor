@@ -13,14 +13,34 @@ export interface Err<E> {
 
 export type Result<T, E> = Ok<T> | Err<E>;
 
-const Ok = <T>(val: T): Ok<T> => ({ _type: "result", tag: "Ok", val });
-const Err = <E>(err: E): Err<E> => ({ _type: "result", tag: "Err", err });
+export const Ok = <T>(val: T): Ok<T> => ({ _type: "result", tag: "Ok", val });
+export const Err = <E>(err: E): Err<E> => ({
+  _type: "result",
+  tag: "Err",
+  err
+});
 
 const isResult = <T, E>(val: unknown): val is Result<T, E> =>
   val !== undefined &&
   val !== null &&
   typeof val === "object" &&
   (val as any)._type === "result";
+
+export const allResult = <T, E>(xs: Result<T, E>[]): Result<T[], E> => {
+  const out = [];
+  for (const x of xs) {
+    if (x.tag === "Err") {
+      return x;
+    }
+    out.push(x.val);
+  }
+  return Ok(out);
+};
+
+export const chainErrors = (
+  err: Err<string>,
+  anotherErr: string
+): Err<string> => Err(`${anotherErr} >> ${err.err}`);
 
 // -------------- Option --------------
 interface Some<T> {

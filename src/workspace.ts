@@ -8,7 +8,7 @@ type FolderEntry = {
   children: { [name: string]: FolderEntry | FileEntry };
 };
 
-export type SemVer = string; // TODO
+export type SemVerRange = string; // TODO
 export type Version = string; // TODO
 
 export type DepsLock = {
@@ -16,7 +16,7 @@ export type DepsLock = {
 };
 
 export type ExplicitDeps = {
-  [packageName: string]: SemVer;
+  [packageName: string]: SemVerRange;
 };
 
 export type Workspace = {
