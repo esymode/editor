@@ -19,7 +19,7 @@ export type ExplicitDeps = {
   [packageName: string]: SemVerRange;
 };
 
-export type Workspace = {
+export type Project = {
   // 1
   version: number;
 

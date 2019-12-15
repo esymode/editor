@@ -34,6 +34,7 @@ export default {
           "useState",
           "useEffect",
           "useRef",
+          "useReducer",
           "Fragment",
           "createElement"
         ],
