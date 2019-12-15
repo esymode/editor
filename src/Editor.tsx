@@ -4,7 +4,7 @@ import * as monaco from "monaco-editor";
 import { css } from "emotion";
 
 import { useState, useEffect, useRef, useReducer } from "react";
-import { FolderItem, FilesPanel } from "./leftPanel/FilesPanel";
+import { FolderItem, FilesPanel } from "./sidePanel/FilesPanel";
 import { Evt } from "./ideEvents";
 // import { PackageJSON } from "./virtual-path-types";
 
@@ -29,6 +29,15 @@ const insert = (folder: FolderItem, name: string): FolderItem => {
     children: [...folder.children, { tag: "file", name }]
   };
 };
+
+const deleteItem = (folder: FolderItem, name: string): FolderItem => {
+  return {
+    tag: "folder",
+    name: folder.name,
+    children: folder.children.filter(c => c.name != name)
+  };
+};
+
 type IDEState = {
   activeFilePath?: string;
   projectFiles: FolderItem;
@@ -49,7 +58,16 @@ const reducer = (prev: IDEState, evt: Evt): IDEState =>
       projectFiles: insert(prev.projectFiles, name),
       activeFilePath: name,
       content: { ...prev.content, [name]: "" }
-    })
+    }),
+
+    DeleteFile: path => {
+      return {
+        ...prev,
+        projectFiles: deleteItem(prev.projectFiles, path),
+        activeFilePath: name
+        // content: { ...prev.content, [name]: "" }
+      };
+    }
   });
 
 const initialProjectFiles: FolderItem = {

@@ -8,6 +8,8 @@ import {
   FaFolder,
   FaFolderOpen,
   FaChevronDown,
+  FaPlusCircle,
+  FaTrash,
   FaChevronRight
 } from "react-icons/fa";
 import { Dispatch, Evt } from "src/ideEvents";
@@ -54,15 +56,25 @@ export const FilesPanel: React.FC<{
   dispatch: Dispatch;
 }> = ({ root: { children }, dispatch }) => (
   <div className={panelStyle}>
-    <button onClick={() => dispatch(Evt.AddFile("foo.ts"))}>New file</button>
+    <button
+      onClick={() => {
+        const filename = prompt("Filename?");
+
+        if (filename) {
+          dispatch(Evt.AddFile(filename));
+        }
+      }}
+    >
+      <FaPlusCircle /> New file
+    </button>
 
     {children.map(child => (
-      <TreeNode
+      <FileTreeItem
         parentPath=""
         key={child.name}
         item={child}
-        onFileSelected={path => dispatch(Evt.SelectFile(path))}
-      ></TreeNode>
+        dispatch={dispatch}
+      ></FileTreeItem>
     ))}
   </div>
 );
@@ -74,6 +86,15 @@ const getPaddingLeft = (level: number, type: Item["tag"]) =>
 // padding-left: ${props => getPaddingLeft(props.level, props.type)}px;
 const itemStyle = css`
   display: flex;
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+`;
+
+const itemRowStyle = css`
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
   flex-direction: row;
   align-items: center;
   padding: 5px 8px;
@@ -93,42 +114,61 @@ const itemIconStyle = css`
 `;
 
 // level={level} type={item.tag}
-const TreeNode: React.FC<{
+const FileTreeItem: React.FC<{
   item: Item;
   level?: number;
   parentPath: string;
-  onFileSelected: (path: string) => void;
-}> = ({ parentPath, item, onFileSelected, level = 0 }) => {
+  dispatch: Dispatch;
+}> = ({ parentPath, item, dispatch, level = 0 }) => {
   const [isOpened, setIsOpened] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   const myPath = joinPath(parentPath, item.name);
+  const toggleOpen = () => setIsOpened(!isOpened);
   return (
     <>
       <div
-        className={itemStyle}
+        className={itemRowStyle}
         style={{ paddingLeft: getPaddingLeft(level, item.tag) }}
-        onClick={() => onFileSelected(myPath)}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
-        <div className={chevronStyle} onClick={() => setIsOpened(!isOpened)}>
-          {item.tag === "folder" &&
-            (isOpened ? <FaChevronDown /> : <FaChevronRight />)}
-        </div>
+        <div
+          className={itemStyle}
+          onClick={
+            item.tag === "folder"
+              ? toggleOpen
+              : () => dispatch(Evt.SelectFile(myPath))
+          }
+        >
+          <div className={chevronStyle} onClick={toggleOpen}>
+            {item.tag === "folder" &&
+              (isOpened ? <FaChevronDown /> : <FaChevronRight />)}
+          </div>
 
-        <div className={itemIconStyle}>
-          {item.tag === "file" && <FaFile />}
-          {item.tag === "folder" && isOpened === true && <FaFolderOpen />}
-          {item.tag === "folder" && !isOpened && <FaFolder />}
-        </div>
+          <div className={itemIconStyle}>
+            {item.tag === "file" && <FaFile />}
+            {item.tag === "folder" && isOpened === true && <FaFolderOpen />}
+            {item.tag === "folder" && !isOpened && <FaFolder />}
+          </div>
 
-        <span role="button">{item.name}</span>
+          <span role="button">{item.name}</span>
+        </div>
+        <div
+          role="button"
+          hidden={!isHovered}
+          onClick={() => dispatch(Evt.DeleteFile(myPath))}
+        >
+          <FaTrash size={12} />
+        </div>
       </div>
 
       {isOpened &&
         item.tag === "folder" &&
         item.children.map(child => (
-          <TreeNode
+          <FileTreeItem
             parentPath={myPath}
-            onFileSelected={onFileSelected}
+            dispatch={dispatch}
             key={child.name}
             item={child}
             level={level + 1}
@@ -137,21 +177,3 @@ const TreeNode: React.FC<{
     </>
   );
 };
-
-// onClick={() => onNodeSelect(node)}
-
-// Treeitem.propTypes = {
-//   node: PropTypes.object.isRequired,
-//   getChildNodes: PropTypes.func.isRequired,
-//   level: PropTypes.number.isRequired,
-//   onToggle: PropTypes.func.isRequired,
-//   onNodeSelect: PropTypes.func.isRequired
-// };
-
-// TreeNode.defaultProps = {
-//   level: 0
-// };
-
-// <div>
-//   {selectedFile && selectedFile.type === "file" && selectedFile.content}
-// </div>

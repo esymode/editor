@@ -5,7 +5,8 @@ type FilePath = string;
 export const Evt = Union({
   SelectFile: of<FilePath>(),
   AddFile: of<FilePath>(),
-  SaveContent: of<FilePath, string>()
+  SaveContent: of<FilePath, string>(),
+  DeleteFile: of<FilePath>()
 });
 
 export type Evt = typeof Evt.T;
