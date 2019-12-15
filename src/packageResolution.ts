@@ -1,23 +1,26 @@
-import { DepsLock, SemVer, ExplicitDeps, Version } from "./workspace";
+import {
+  DepsLock,
+  SemVer as SemVerRange,
+  ExplicitDeps,
+  Version
+} from "./workspace";
 
 export type PackageJSON = {
   dependencies: {
-    [name: string]: SemVer;
+    [name: string]: SemVerRange;
   };
 };
 
-type ResolveSemverRequest = {
-  name: string;
-  semver: SemVer;
+// Translate this (name, semver range) into a specific version
+export type ResolveSemverRequest = {
+  name: string; // "react"
+  semver: SemVerRange; // ^16.11.0
 };
 
-type FetchPackageJsonRequest = {
-  name: string;
+// Fetch package.json for this (name, version)
+export type FetchPackageJsonRequest = {
+  name: string; //
   version: Version;
-};
-
-type PartialDepsLock = {
-  [nameAndSemver: string]: DepsLock[string] | "pending";
 };
 
 type PackageResolutionState = { readonly __tag: unique symbol };
@@ -35,7 +38,7 @@ export type ResolutionPausedForIO = {
 export type ResolutionReadyToResume = {
   stage: "ready-to-resume";
   resolvedSemVerRequests: [ResolveSemverRequest, Version][];
-  fetchedPackageJsonRequests: PackageJSON[];
+  fetchedPackageJsonRequests: [FetchPackageJsonRequest, PackageJSON][];
   state: PackageResolutionState;
 };
 export type ResolutionDone = {
@@ -43,11 +46,14 @@ export type ResolutionDone = {
   lock: DepsLock;
 };
 
-const invariant = (b: boolean, m?: string) => {
-  if (!b) {
-    throw new Error(`Invariant violated: ${m}`);
-  }
-};
+const reqSemverId = ({ name, semver }: ResolveSemverRequest) =>
+  `semver-${versionedPackage(name, semver)}`;
+
+const reqPackageJSONId = ({ name, version }: FetchPackageJsonRequest) =>
+  `package-${versionedPackage(name, version)}`;
+
+const dedupe = <T>(xs: T[], key: (_: T) => string): T[] =>
+  Array.from(xs.reduce((m, x) => m.set(key(x), x), new Map()).values());
 
 /*
  1. for each name-semver, request resolution if not in map
@@ -60,27 +66,26 @@ export const lockFromExplicitDeps = (
   step: StartOfResolution | ResolutionReadyToResume
 ): ResolutionPausedForIO | ResolutionDone => {
   type RealStateType = {
-    packageJsonFetchIssued: Set<string>;
-    partialDepsLock: PartialDepsLock;
+    // {"react@16.11.0", "scheduler@1.4.0"}
+    packageJsonFetchDone: Set<string>;
+    pendingIo: Set<string>;
+    partialDepsLock: DepsLock;
   };
 
   if (step.stage === "start") {
     // First, fetch version list for every package we have.
+    const initialSemverRequests = Object.entries(
+      step.deps
+    ).map(([name, semver]) => ({ name, semver }));
+
     const state: RealStateType = {
-      packageJsonFetchIssued: new Set(),
-      partialDepsLock: Object.entries(step.deps).reduce(
-        (state, [name, semver]) => {
-          state[`${name}@${semver}`] = "pending";
-          return state;
-        },
-        {} as PartialDepsLock
-      )
+      packageJsonFetchDone: new Set(),
+      pendingIo: new Set(initialSemverRequests.map(reqSemverId)),
+      partialDepsLock: {}
     };
     return {
       stage: "paused-for-io",
-      resolveSemverRequests: Object.entries(
-        step.deps
-      ).map(([name, semver]) => ({ name, semver })),
+      resolveSemverRequests: initialSemverRequests,
       fetchPackageJsonRequests: [],
       state: (state as unknown) as PackageResolutionState
     };
@@ -88,75 +93,82 @@ export const lockFromExplicitDeps = (
 
   const internalState = (step.state as unknown) as RealStateType;
 
+  const newPackagesToFetch: FetchPackageJsonRequest[] = dedupe(
+    step.resolvedSemVerRequests
+      .filter(
+        ([{ name }, version]) =>
+          !internalState.packageJsonFetchDone.has(
+            versionedPackage(name, version)
+          ) && !internalState.pendingIo.has(reqPackageJSONId({ name, version }))
+      )
+      .map(([{ name }, version]) => ({ name, version })),
+    ({ name, version }) => `${name}@${version}`
+  );
+
+  const newSemverRangesToResolve: ResolveSemverRequest[] = dedupe(
+    ([] as [string, SemVerRange][])
+      .concat(
+        ...step.fetchedPackageJsonRequests.map(([, { dependencies }]) =>
+          Object.entries(dependencies)
+        )
+      )
+      .filter(
+        ([name, semver]) =>
+          internalState.partialDepsLock[versionedPackage(name, semver)] ===
+            undefined &&
+          !internalState.pendingIo.has(reqSemverId({ name, semver }))
+      )
+      .map(([name, semver]) => ({ name, semver })),
+    ({ name, semver }) => `${name}@${semver}`
+  );
+
+  step.resolvedSemVerRequests.forEach(([req]) =>
+    internalState.pendingIo.delete(reqSemverId(req))
+  );
+
+  step.fetchedPackageJsonRequests.forEach(([req]) =>
+    internalState.pendingIo.delete(reqPackageJSONId(req))
+  );
+
+  newSemverRangesToResolve.forEach(req =>
+    internalState.pendingIo.add(reqSemverId(req))
+  );
+
+  newPackagesToFetch.forEach(req =>
+    internalState.pendingIo.add(reqPackageJSONId(req))
+  );
+
+  newPackagesToFetch.forEach(({ name, version }) => {
+    internalState.packageJsonFetchDone.add(`${name}@${version}`);
+  });
+
   const lockUpdateDoneRequests = step.resolvedSemVerRequests.reduce(
     (lock, [{ name, semver }, version]) => {
-      // The request should have been marked as 'pending' when we started it.
-      // It should not have been already completed.
-      invariant(
-        internalState.partialDepsLock[`${name}@${semver}`] === "pending",
-        `Package ${name}@${semver} was resolved without being marked pending`
-      );
-
       lock[`${name}@${semver}`] = version;
       return lock;
     },
-    {} as PartialDepsLock
+    {} as DepsLock
   );
 
-  const newPackagesToFetch: FetchPackageJsonRequest[] = step.resolvedSemVerRequests
-    .filter(
-      ([{ name }, version]) =>
-        !internalState.packageJsonFetchIssued.has(`${name}@${version}`)
-    )
-    .map(([{ name }, version]) => ({ name, version }));
-
-  const newDepsToResolve: ResolveSemverRequest[] = ([] as [string, SemVer][])
-    .concat(
-      ...step.fetchedPackageJsonRequests.map(({ dependencies }) =>
-        Object.entries(dependencies)
-      )
-    )
-    .filter(
-      ([name, semver]) =>
-        internalState.partialDepsLock[`${name}@${semver}`] === undefined
-    )
-    .map(([name, semver]) => ({ name, semver }));
-
-  const lockUpdatePendingRequests: PartialDepsLock = newDepsToResolve.reduce(
-    (newState, { name, semver }) => {
-      newState[`${name}@${semver}`] = "pending";
-      return newState;
-    },
-    {} as PartialDepsLock
-  );
-
-  if (newPackagesToFetch.length === 0 && newDepsToResolve.length === 0) {
-    const lock = Object.fromEntries(
-      Object.entries(internalState.partialDepsLock).map(([key, value]): [
-        string,
-        DepsLock[string]
-      ] => {
-        if (value === "pending") {
-          throw new Error("Unresolved request in deps lock");
-        }
-        return [key, value];
-      })
-    );
-    return { stage: "done", lock };
+  if (internalState.pendingIo.size === 0) {
+    return { stage: "done", lock: internalState.partialDepsLock };
   }
 
   const newInternalState: RealStateType = {
     partialDepsLock: {
       ...internalState.partialDepsLock,
-      ...lockUpdatePendingRequests,
       ...lockUpdateDoneRequests
     },
-    packageJsonFetchIssued: internalState.packageJsonFetchIssued
+    pendingIo: internalState.pendingIo,
+    packageJsonFetchDone: internalState.packageJsonFetchDone
   };
   return {
     stage: "paused-for-io",
-    resolveSemverRequests: newDepsToResolve,
+    resolveSemverRequests: newSemverRangesToResolve,
     fetchPackageJsonRequests: newPackagesToFetch,
     state: (newInternalState as unknown) as PackageResolutionState
   };
 };
+function versionedPackage(name: string, semver: string) {
+  return `${name}@${semver}`;
+}
