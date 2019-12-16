@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "emotion": "^10.0.23",
+    "immutable": "^4.0.0-rc.12",
     "monaco-editor": "^0.18.1",
     "react": "16.12.0",
     "react-dom": "16.12.0",
