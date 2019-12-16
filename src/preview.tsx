@@ -27,7 +27,10 @@ const putSourceIntoIframe = async function(
   };
 };
 
-export const Preview: React.FC<{ source: string }> = ({ source }) => {
+export const Preview: React.FC<{ source: string; className?: string }> = ({
+  source,
+  className
+}) => {
   const outputRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
@@ -36,11 +39,6 @@ export const Preview: React.FC<{ source: string }> = ({ source }) => {
     }
   }, [source]);
 
-  return (
-    <iframe
-      ref={outputRef}
-      id="output"
-      style={{ width: "100%", height: "350px", border: "1px solid grey" }}
-    ></iframe>
-  );
+  return <iframe className={className} ref={outputRef} id="output"></iframe>;
 };
+// style={{ width: "100%", height: "350px", border: "1px solid grey" }}

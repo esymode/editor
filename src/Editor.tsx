@@ -4,8 +4,18 @@ import * as monaco from "monaco-editor";
 import { css } from "emotion";
 
 import { useState, useEffect, useRef, useReducer } from "react";
-import { FolderItem, FilesPanel } from "./sidePanel/FilesPanel";
-import { Evt } from "./ideEvents";
+import { FilesPanel } from "./sidePanel/FilesPanel";
+import {
+  Evt,
+  FolderItem,
+  FileId,
+  FolderId,
+  createProjectFiles,
+  addFile,
+  saveFileContent,
+  addFolder
+} from "./projectFilesModel";
+import { Preview } from "./preview";
 // import { PackageJSON } from "./virtual-path-types";
 
 (window as any).MonacoEnvironment = {
@@ -30,75 +40,35 @@ const insert = (folder: FolderItem, name: string): FolderItem => {
   };
 };
 
-const deleteItem = (folder: FolderItem, name: string): FolderItem => {
-  return {
-    tag: "folder",
-    name: folder.name,
-    children: folder.children.filter(c => c.name != name)
-  };
+const collectFileIdsRecursively = (folder: FolderItem): FileId[] => {
+  const res: FileId[] = [];
+  for (const child of folder.children) {
+    if (child.tag === "file") res.push(child.id);
+    if (child.tag === "folder") res.push(...collectFileIdsRecursively(child));
+  }
+  return res;
 };
 
 type IDEState = {
-  activeFilePath?: string;
+  activeFileId?: FileId;
   projectFiles: FolderItem;
   content: ContentMapping;
 };
 
-const reducer = (prev: IDEState, evt: Evt): IDEState =>
-  Evt.match<IDEState>(evt, {
-    SelectFile: path => ({ ...prev, activeFilePath: path }),
+const init = () => {
+  const p = createProjectFiles();
+  saveFileContent(p, addFile(p, "index.ts"), "const bla = 1;");
+  saveFileContent(
+    p,
+    addFile(p, "lib.ts", addFolder(p, "src")),
+    'console.log("Hello");'
+  );
 
-    SaveContent: (path, content) => ({
-      ...prev,
-      content: { ...prev.content, [path]: content }
-    }),
-
-    AddFile: name => ({
-      ...prev,
-      projectFiles: insert(prev.projectFiles, name),
-      activeFilePath: name,
-      content: { ...prev.content, [name]: "" }
-    }),
-
-    DeleteFile: path => {
-      return {
-        ...prev,
-        projectFiles: deleteItem(prev.projectFiles, path),
-        activeFilePath: name
-        // content: { ...prev.content, [name]: "" }
-      };
-    }
-  });
-
-const initialProjectFiles: FolderItem = {
-  tag: "folder",
-  name: "root",
-  children: [
-    {
-      tag: "file",
-      name: "index.ts"
-    },
-
-    {
-      tag: "folder",
-      name: "src",
-      children: [
-        {
-          tag: "file",
-          name: "somethingElse.ts"
-        }
-      ]
-    }
-  ]
-};
-
-const initialContent: ContentMapping = {
-  "index.ts": "const bla = 1;",
-  "src/somethingElse.ts": 'console.log("Hello");'
+  return p;
 };
 
 export const IDE: React.FC = () => {
-  const [{ activeFilePath, content, projectFiles }, dispatch] = useReducer(
+  const [{ activeFileId, content, projectFiles }, dispatch] = useReducer(
     reducer,
     {
       projectFiles: initialProjectFiles,
@@ -110,18 +80,15 @@ export const IDE: React.FC = () => {
   );
   useEffect(() => {
     if (activeFilePath !== undefined) {
-      const m = monaco.editor.createModel(
-        content[activeFilePath],
-        "typescript"
-      );
+      const m = monaco.editor.createModel(content[activeFileId], "typescript");
       setModel(m);
       return () => {
         const currentContent = m.getValue();
         m.dispose();
-        dispatch(Evt.SaveContent(activeFilePath, currentContent));
+        dispatch(Evt.SaveContent(activeFileId, currentContent));
       };
     }
-  }, [activeFilePath]);
+  }, [activeFileId]);
 
   const emit = () => {};
   // onChange({
@@ -151,13 +118,18 @@ export const IDE: React.FC = () => {
       ) : (
         "Click on a file."
       )}
-      <div className={previewStyle}></div>
+      <Preview source={source} className={previewStyle}></Preview>
       <div className={leftPanelStyle}>
         <FilesPanel root={projectFiles} dispatch={dispatch} />
       </div>
     </div>
   );
 };
+
+const source = `const helloWorld = document.createElement("span");
+helloWorld.innerText = "hello world";
+document.body.appendChild(helloWorld);
+console.log({ helloWorld });`;
 
 const Editor: React.FC<{
   model: monaco.editor.ITextModel;
