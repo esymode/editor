@@ -5,7 +5,7 @@ export const Evt = Union({
   SelectFile: of<FileId>(),
   AddFile: of<string, FolderId | undefined>(),
   AddFolder: of<string, FolderId>(),
-  // SaveContent: of<FileId, string>(),
+  SaveContent: of<FileId, string>(),
   DeleteFileOrFolder: of<FileId | FolderId>()
 });
 
@@ -30,17 +30,18 @@ export type FolderItem = {
 //   readonly __tag: unique symbol;
 // }
 
-export type ProjectFiles = {
+export type ProjectModel = {
   version: number;
   selectedFile: FileId | null;
   rootId: FolderId;
   files: Dict<FileId, FileItem>;
   folders: Dict<FolderId, FolderItem>;
+  sources: Map<FileId, string>;
 };
 
 // fileContent: Map<FileId, string>;
 
-export const createProjectFiles = (): ProjectFiles => {
+export const createProjectFiles = (): ProjectModel => {
   const rootId = genFolderId(0);
   return {
     version: 1,
@@ -50,106 +51,49 @@ export const createProjectFiles = (): ProjectFiles => {
     folders: Dict<FolderId, FolderItem>().set(rootId, {
       children: [],
       name: "root"
-    })
+    }),
+    sources: new Map()
   };
 };
 
-const unsafeGetItem = <K, T>(map: Dict<K, T>, key: K): T => {
+export const unsafeGetItem = <K, T>(map: Dict<K, T>, key: K): T => {
   const item = map.get(key);
   if (item === undefined)
     throw new Error(`unsafeGetItem failed for key=${key}`);
   return item;
 };
 
-// const toRealProject = (proj: ProjectFiles): ProjectFiles => proj as any;
-// const toOpaqueProject = (proj: ProjectFiles): ProjectFiles => proj as any;
-
-export const getFile = (project: ProjectFiles, fileId: FileId): FileItem =>
+export const getFile = (project: ProjectModel, fileId: FileId): FileItem =>
   unsafeGetItem(project.files, fileId);
 
 export const getFolder = (
-  project: ProjectFiles,
+  project: ProjectModel,
   folderId: FolderId
 ): FolderItem => unsafeGetItem(project.folders, folderId);
 
-// export function getProjectItem(project: ProjectFiles, id: FileId): FileItem;
-// export function getProjectItem(project: ProjectFiles, id: FolderId): FolderItem;
-// export function getProjectItem(
-//   project: ProjectFiles,
-//   id: FolderId | FileId
-// ): FolderItem | FileItem;
-// export function getProjectItem(
-//   project: ProjectFiles,
-//   id: FolderId | FileId
-// ): FolderItem | FileItem {
-//   return isFile(id) ? getFile(project, id) : getFolder(project, id);
-// }
-
-// export const addFile = (
-//   project: ProjectFiles,
-//   name: string,
-//   toFolderId?: FolderId
-// ): [ProjectFiles, FileId] => {
-//   const { rootId, folders, files } = toRealProject(project);
-
-//   const id = genFileId();
-
-//   const folderId = toFolderId ?? rootId;
-//   const folderItem = unsafeGetItem(folders, folderId);
-
-//   return [
-//     toOpaqueProject({
-//       rootId,
-//       folders: folders.set(folderId, {
-//         ...folderItem,
-//         children: folderItem.children.concat(id)
-//       }),
-//       files: files.set(id, { name })
-//     }),
-//     id
-//   ];
-// };
-
-// export const addFolder = (
-//   project: ProjectFiles,
-//   name: string,
-//   toFolderId?: FolderId
-// ): [ProjectFiles, FolderId] => {
-//   const { rootId, folders, files } = toRealProject(project);
-
-//   const id = genFolderId();
-
-//   const parent = toFolderId ?? rootId;
-//   const folderItem = unsafeGetItem(folders, parent);
-
-//   folders.set(id, { name, children: [] }).set(parent, {
-//     ...folderItem,
-//     children: folderItem.children.concat(id)
-//   });
-
-//   return [toOpaqueProject({ rootId, folders, files }), id];
-// };
-
-// export const getRootFiles = (project: ProjectFiles): (FileId | FolderId)[] => {
-//   const { rootId, folders } = toRealProject(project);
-//   return unsafeGetItem(folders, rootId).children;
-// };
-
 export const projectFileReducer = (
-  prev: ProjectFiles,
+  prev: ProjectModel,
   evt: Evt
-): ProjectFiles =>
-  Evt.match<ProjectFiles>(evt, {
-    SelectFile: id => ({ ...prev, activeFileId: id }),
+): ProjectModel =>
+  Evt.match<ProjectModel>(evt, {
+    SelectFile: (id): ProjectModel => ({ ...prev, selectedFile: id }),
 
-    AddFile: (fileName, toFolderId = prev.rootId) => {
-      const { version, files, folders, rootId } = prev;
+    SaveContent: (fileId, source) => {
+      // mutable set
+      prev.sources.set(fileId, source);
+      // avoid rerender
+      return prev;
+    },
+
+    AddFile: (fileName, toFolderId = prev.rootId): ProjectModel => {
+      const { version, files, folders, rootId, sources } = prev;
       const id = genFileId(version);
 
       const { name, children } = unsafeGetItem(folders, toFolderId);
 
       return {
         rootId,
+        sources: sources.set(id, ""),
         selectedFile: id,
         version: version + 1,
         folders: folders.set(toFolderId, {
@@ -160,7 +104,7 @@ export const projectFileReducer = (
       };
     },
 
-    AddFolder: (folderName, toFolderId = prev.rootId) => {
+    AddFolder: (folderName, toFolderId = prev.rootId): ProjectModel => {
       const { version, folders } = prev;
       const id = genFolderId(version);
 
@@ -178,24 +122,30 @@ export const projectFileReducer = (
       };
     },
 
-    DeleteFileOrFolder: id => {
+    DeleteFileOrFolder: (id): ProjectModel => {
       // TODO
       const { version, files, folders, rootId, selectedFile } = prev;
       const { name, children } = unsafeGetItem(folders, rootId);
 
-      if (children.find(cid => cid === id) || !isFile(id)) {
+      if (!children.find(cid => cid === id) || !isFile(id)) {
         throw new Error("unimplemented");
       }
 
+      const newFiles = files.delete(id);
       return {
         ...prev,
         version: version + 1,
-        files: files.delete(id),
+        files: newFiles,
         folders: folders.set(rootId, {
           name,
           children: children.filter(cid => cid !== id)
         }),
-        selectedFile: selectedFile === id ? null : selectedFile
+        selectedFile:
+          selectedFile === id
+            ? newFiles.size > 0
+              ? newFiles.findKey(() => true) || null
+              : null
+            : selectedFile
       };
     }
   });

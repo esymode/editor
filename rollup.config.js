@@ -11,6 +11,7 @@ import css from "rollup-plugin-css-only";
 // process.env.NODE_ENV = "production";
 // const production = process.env.NODE_ENV;
 const production = !process.env.ROLLUP_WATCH;
+// process.env.NODE_ENV = "development";
 
 export default {
   input: "src/main.tsx",
@@ -27,7 +28,7 @@ export default {
     resolve(),
     commonjs({
       namedExports: {
-        "node_modules/react/index.js": [
+        react: [
           "Children",
           "Component",
           "PropTypes",
@@ -36,9 +37,10 @@ export default {
           "useRef",
           "useReducer",
           "Fragment",
+          "createContext",
           "createElement"
         ],
-        "node_modules/react-dom/index.js": ["render"]
+        "react-dom": ["render"]
       }
     }),
     // converts date-fns to ES modules

@@ -15,18 +15,15 @@ import {
 import {
   Dispatch,
   Evt,
-  FileItem,
-  FolderItem,
-  ProjectFiles,
+  ProjectModel,
   unwrapItemId,
-  getRootFiles,
-  getProjectItem,
   FolderId,
   FileId,
   isFile,
   getFile,
-  getFolder
-} from "src/projectFilesModel";
+  getFolder,
+  unsafeGetItem
+} from "../projectFilesModel";
 
 // const panelStyle = css`
 //   flex: 1;
@@ -50,10 +47,11 @@ const panelStyle = css`
 // `;
 
 export const FilesPanel: React.FC<{
-  projectFiles: ProjectFiles;
+  projectFiles: ProjectModel;
   dispatch: Dispatch;
 }> = ({ projectFiles, dispatch }) => {
-  const rootIds = getRootFiles(projectFiles);
+  const { rootId, folders } = projectFiles;
+  const { children } = unsafeGetItem(folders, rootId);
   return (
     <div className={panelStyle}>
       <button
@@ -67,7 +65,7 @@ export const FilesPanel: React.FC<{
         <FaPlusCircle /> New file
       </button>
 
-      {renderChildren(rootIds, 0, projectFiles, dispatch)}
+      {renderChildren(children, 0, projectFiles, dispatch)}
     </div>
   );
 };
@@ -108,7 +106,7 @@ const itemIconStyle = css`
 
 // level={level} type={item.tag}
 const FolderView: React.FC<{
-  projectFiles: ProjectFiles;
+  projectFiles: ProjectModel;
   folderId: FolderId;
   level?: number;
   dispatch: Dispatch;
@@ -147,13 +145,13 @@ const FolderView: React.FC<{
         </div>
       </div>
 
-      {isOpened && renderChildren(item, level, projectFiles, dispatch)}
+      {isOpened && renderChildren(item.children, level, projectFiles, dispatch)}
     </>
   );
 };
 
 const FileView: React.FC<{
-  projectFiles: ProjectFiles;
+  projectFiles: ProjectModel;
   fileId: FileId;
   level?: number;
   dispatch: Dispatch;
@@ -162,10 +160,14 @@ const FileView: React.FC<{
 
   const item = getFile(projectFiles, fileId);
 
+  const isSelected = projectFiles.selectedFile === fileId;
   return (
     <div
       className={itemRowStyle}
-      style={{ paddingLeft: getPaddingLeft(level, "file") }}
+      style={{
+        paddingLeft: getPaddingLeft(level, "file"),
+        outline: isSelected ? "green solid 1px" : undefined
+      }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -193,7 +195,7 @@ const FileView: React.FC<{
 function renderChildren(
   children: (FileId | FolderId)[],
   level: number,
-  projectFiles: ProjectFiles,
+  projectFiles: ProjectModel,
   dispatch: Dispatch
 ) {
   return children.map(childId =>

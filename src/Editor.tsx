@@ -7,13 +7,9 @@ import { useState, useEffect, useRef, useReducer } from "react";
 import { FilesPanel } from "./sidePanel/FilesPanel";
 import {
   Evt,
-  FolderItem,
-  FileId,
-  FolderId,
   createProjectFiles,
-  addFile,
-  saveFileContent,
-  addFolder
+  projectFileReducer,
+  unsafeGetItem
 } from "./projectFilesModel";
 import { Preview } from "./preview";
 // import { PackageJSON } from "./virtual-path-types";
@@ -28,67 +24,43 @@ import { Preview } from "./preview";
   }
 };
 
-export type ContentMapping = {
-  [id: string]: string;
-};
-
-const insert = (folder: FolderItem, name: string): FolderItem => {
-  return {
-    tag: "folder",
-    name: folder.name,
-    children: [...folder.children, { tag: "file", name }]
-  };
-};
-
-const collectFileIdsRecursively = (folder: FolderItem): FileId[] => {
-  const res: FileId[] = [];
-  for (const child of folder.children) {
-    if (child.tag === "file") res.push(child.id);
-    if (child.tag === "folder") res.push(...collectFileIdsRecursively(child));
-  }
-  return res;
-};
-
-type IDEState = {
-  activeFileId?: FileId;
-  projectFiles: FolderItem;
-  content: ContentMapping;
-};
-
 const init = () => {
-  const p = createProjectFiles();
-  saveFileContent(p, addFile(p, "index.ts"), "const bla = 1;");
-  saveFileContent(
-    p,
-    addFile(p, "lib.ts", addFolder(p, "src")),
-    'console.log("Hello");'
+  let p = projectFileReducer(
+    createProjectFiles(),
+    Evt.AddFile("index.ts", undefined)
   );
 
-  return p;
+  const fileId = p.files.findKey(fi => fi.name === "index.ts")!;
+
+  return projectFileReducer(
+    p,
+    Evt.SaveContent(fileId, 'console.log("Hello world!")')
+  );
 };
 
 export const IDE: React.FC = () => {
-  const [{ activeFileId, content, projectFiles }, dispatch] = useReducer(
-    reducer,
-    {
-      projectFiles: initialProjectFiles,
-      content: initialContent
-    }
-  );
+  const [projectModel, dispatch] = useReducer(projectFileReducer, init());
+
+  console.log("IDE render model=", projectModel);
+
+  const { selectedFile, sources, files } = projectModel;
+
   const [model, setModel] = useState<monaco.editor.ITextModel | undefined>(
     undefined
   );
   useEffect(() => {
-    if (activeFilePath !== undefined) {
-      const m = monaco.editor.createModel(content[activeFileId], "typescript");
+    if (selectedFile) {
+      const m = monaco.editor.createModel(
+        sources.get(selectedFile)!,
+        "typescript"
+      );
       setModel(m);
       return () => {
         const currentContent = m.getValue();
-        m.dispose();
-        dispatch(Evt.SaveContent(activeFileId, currentContent));
+        dispatch(Evt.SaveContent(selectedFile, currentContent));
       };
     }
-  }, [activeFileId]);
+  }, [selectedFile]);
 
   const emit = () => {};
   // onChange({
@@ -108,19 +80,26 @@ export const IDE: React.FC = () => {
   return (
     <div className={containerLayout}>
       <div className={headerStyle}></div>
-      {model ? (
-        <Editor
-          model={model}
-          onChange={() => {
-            emit();
-          }}
-        />
-      ) : (
-        "Click on a file."
-      )}
+      <div className={editorContent}>
+        <div className={editorOpenedFiles}>
+          {selectedFile ? (
+            <span>{unsafeGetItem(files, selectedFile).name}</span>
+          ) : null}
+        </div>
+        {model ? (
+          <Monaco
+            model={model}
+            onChange={() => {
+              emit();
+            }}
+          />
+        ) : (
+          "Click on a file."
+        )}
+      </div>
       <Preview source={source} className={previewStyle}></Preview>
       <div className={leftPanelStyle}>
-        <FilesPanel root={projectFiles} dispatch={dispatch} />
+        <FilesPanel projectFiles={projectModel} dispatch={dispatch} />
       </div>
     </div>
   );
@@ -131,7 +110,7 @@ helloWorld.innerText = "hello world";
 document.body.appendChild(helloWorld);
 console.log({ helloWorld });`;
 
-const Editor: React.FC<{
+const Monaco: React.FC<{
   model: monaco.editor.ITextModel;
   onChange: () => void;
 }> = ({ model, onChange }) => {
@@ -147,13 +126,14 @@ const Editor: React.FC<{
   useEffect(() => {
     if (editor) {
       editor.setModel(model);
+      editor.focus();
       // Note: This callback has to be re-added after each setModel call.
       return editor.onDidChangeModelContent(onChange).dispose;
     }
     return undefined;
   }, [editor, model, onChange]);
 
-  return <div ref={editorContainerRef} className={editorStyle}></div>;
+  return <div ref={editorContainerRef} className={monacoStyle}></div>;
 };
 
 // const editorStyle = css({
@@ -176,10 +156,30 @@ const Sizes = {
   previewWidth: 600
 };
 
-const editorStyle = css`
+const editorContent = css`
   grid-column: editor;
   grid-row: content;
+  /* width: 100%;
+  height: 100%; */
+  display: grid;
+  /* grid-gap: 10px; */
+  grid-template-rows: [openedFiles] 25px [monaco] auto;
+  background-color: #fff;
+  color: #444;
 `;
+
+const editorOpenedFiles = css`
+  grid-row: openedFiles;
+`;
+
+const monacoStyle = css`
+  grid-row: monaco;
+`;
+
+// const editorStyle = css`
+//   grid-column: editor;
+//   grid-row: content;
+// `;
 
 const previewStyle = css`
   grid-column: preview;
