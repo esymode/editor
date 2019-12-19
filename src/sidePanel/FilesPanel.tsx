@@ -12,7 +12,18 @@ import {
   FaTrash,
   FaChevronRight
 } from "react-icons/fa";
-import { Dispatch, Evt } from "src/ideEvents";
+import {
+  Dispatch,
+  Evt,
+  ProjectModel,
+  unwrapItemId,
+  FolderId,
+  FileId,
+  isFile,
+  getFile,
+  getFolder,
+  unsafeGetItem
+} from "../projectFilesModel";
 
 // const panelStyle = css`
 //   flex: 1;
@@ -35,52 +46,32 @@ const panelStyle = css`
 //   width: 250px;
 // `;
 
-export type FileItem = {
-  tag: "file";
-  name: string;
-};
-
-export type FolderItem = {
-  tag: "folder";
-  name: string;
-  children: (FolderItem | FileItem)[];
-};
-
-// TODO put proper path manipulation
-const joinPath = (a: string, b: string) => (a === "" ? b : a + "/" + b);
-
-export type Item = FolderItem | FileItem;
-
 export const FilesPanel: React.FC<{
-  root: FolderItem;
+  projectFiles: ProjectModel;
   dispatch: Dispatch;
-}> = ({ root: { children }, dispatch }) => (
-  <div className={panelStyle}>
-    <button
-      onClick={() => {
-        const filename = prompt("Filename?");
+}> = ({ projectFiles, dispatch }) => {
+  const { rootId, folders } = projectFiles;
+  const { children } = unsafeGetItem(folders, rootId);
+  return (
+    <div className={panelStyle}>
+      <button
+        onClick={() => {
+          const filename = prompt("Filename?");
+          if (filename) {
+            dispatch(Evt.AddFile(filename, undefined));
+          }
+        }}
+      >
+        <FaPlusCircle /> New file
+      </button>
 
-        if (filename) {
-          dispatch(Evt.AddFile(filename));
-        }
-      }}
-    >
-      <FaPlusCircle /> New file
-    </button>
-
-    {children.map(child => (
-      <FileTreeItem
-        parentPath=""
-        key={child.name}
-        item={child}
-        dispatch={dispatch}
-      ></FileTreeItem>
-    ))}
-  </div>
-);
+      {renderChildren(children, 0, projectFiles, dispatch)}
+    </div>
+  );
+};
 
 const INDENT = 16;
-const getPaddingLeft = (level: number, type: Item["tag"]) =>
+const getPaddingLeft = (level: number, type: "folder" | "file") =>
   type === "folder" ? level * INDENT : level * INDENT + 12;
 
 // padding-left: ${props => getPaddingLeft(props.level, props.type)}px;
@@ -114,42 +105,33 @@ const itemIconStyle = css`
 `;
 
 // level={level} type={item.tag}
-const FileTreeItem: React.FC<{
-  item: Item;
+const FolderView: React.FC<{
+  projectFiles: ProjectModel;
+  folderId: FolderId;
   level?: number;
-  parentPath: string;
   dispatch: Dispatch;
-}> = ({ parentPath, item, dispatch, level = 0 }) => {
+}> = ({ projectFiles, folderId, dispatch, level = 0 }) => {
   const [isOpened, setIsOpened] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-
-  const myPath = joinPath(parentPath, item.name);
   const toggleOpen = () => setIsOpened(!isOpened);
+
+  const item = getFolder(projectFiles, folderId);
+
   return (
     <>
       <div
         className={itemRowStyle}
-        style={{ paddingLeft: getPaddingLeft(level, item.tag) }}
+        style={{ paddingLeft: getPaddingLeft(level, "folder") }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <div
-          className={itemStyle}
-          onClick={
-            item.tag === "folder"
-              ? toggleOpen
-              : () => dispatch(Evt.SelectFile(myPath))
-          }
-        >
+        <div className={itemStyle} onClick={toggleOpen}>
           <div className={chevronStyle} onClick={toggleOpen}>
-            {item.tag === "folder" &&
-              (isOpened ? <FaChevronDown /> : <FaChevronRight />)}
+            {isOpened ? <FaChevronDown /> : <FaChevronRight />}
           </div>
 
           <div className={itemIconStyle}>
-            {item.tag === "file" && <FaFile />}
-            {item.tag === "folder" && isOpened === true && <FaFolderOpen />}
-            {item.tag === "folder" && !isOpened && <FaFolder />}
+            {isOpened ? <FaFolderOpen /> : <FaFolder />}
           </div>
 
           <span role="button">{item.name}</span>
@@ -157,23 +139,82 @@ const FileTreeItem: React.FC<{
         <div
           role="button"
           hidden={!isHovered}
-          onClick={() => dispatch(Evt.DeleteFile(myPath))}
+          onClick={() => dispatch(Evt.DeleteFileOrFolder(folderId))}
         >
           <FaTrash size={12} />
         </div>
       </div>
 
-      {isOpened &&
-        item.tag === "folder" &&
-        item.children.map(child => (
-          <FileTreeItem
-            parentPath={myPath}
-            dispatch={dispatch}
-            key={child.name}
-            item={child}
-            level={level + 1}
-          />
-        ))}
+      {isOpened && renderChildren(item.children, level, projectFiles, dispatch)}
     </>
   );
 };
+
+const FileView: React.FC<{
+  projectFiles: ProjectModel;
+  fileId: FileId;
+  level?: number;
+  dispatch: Dispatch;
+}> = ({ projectFiles, fileId, dispatch, level = 0 }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const item = getFile(projectFiles, fileId);
+
+  const isSelected = projectFiles.selectedFile === fileId;
+  return (
+    <div
+      className={itemRowStyle}
+      style={{
+        paddingLeft: getPaddingLeft(level, "file"),
+        outline: isSelected ? "green solid 1px" : undefined
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div
+        className={itemStyle}
+        onClick={() => dispatch(Evt.SelectFile(fileId))}
+      >
+        <div className={itemIconStyle}>
+          <FaFile />
+        </div>
+
+        <span role="button">{item.name}</span>
+      </div>
+      <div
+        role="button"
+        hidden={!isHovered}
+        onClick={() => dispatch(Evt.DeleteFileOrFolder(fileId))}
+      >
+        <FaTrash size={12} />
+      </div>
+    </div>
+  );
+};
+
+function renderChildren(
+  children: (FileId | FolderId)[],
+  level: number,
+  projectFiles: ProjectModel,
+  dispatch: Dispatch
+) {
+  return children.map(childId =>
+    isFile(childId) ? (
+      <FileView
+        key={unwrapItemId(childId)}
+        level={level + 1}
+        fileId={childId}
+        projectFiles={projectFiles}
+        dispatch={dispatch}
+      />
+    ) : (
+      <FolderView
+        projectFiles={projectFiles}
+        dispatch={dispatch}
+        key={unwrapItemId(childId)}
+        level={level + 1}
+        folderId={childId}
+      />
+    )
+  );
+}

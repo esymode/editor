@@ -4,8 +4,14 @@ import * as monaco from "monaco-editor";
 import { css } from "emotion";
 
 import { useState, useEffect, useRef, useReducer } from "react";
-import { FolderItem, FilesPanel } from "./sidePanel/FilesPanel";
-import { Evt } from "./ideEvents";
+import { FilesPanel } from "./sidePanel/FilesPanel";
+import {
+  Evt,
+  createProjectFiles,
+  projectFileReducer,
+  unsafeGetItem
+} from "./projectFilesModel";
+import { Preview } from "./preview";
 // import { PackageJSON } from "./virtual-path-types";
 
 (window as any).MonacoEnvironment = {
@@ -18,110 +24,43 @@ import { Evt } from "./ideEvents";
   }
 };
 
-export type ContentMapping = {
-  [id: string]: string;
-};
+const init = () => {
+  let p = projectFileReducer(
+    createProjectFiles(),
+    Evt.AddFile("index.ts", undefined)
+  );
 
-const insert = (folder: FolderItem, name: string): FolderItem => {
-  return {
-    tag: "folder",
-    name: folder.name,
-    children: [...folder.children, { tag: "file", name }]
-  };
-};
+  const fileId = p.files.findKey(fi => fi.name === "index.ts")!;
 
-const deleteItem = (folder: FolderItem, name: string): FolderItem => {
-  return {
-    tag: "folder",
-    name: folder.name,
-    children: folder.children.filter(c => c.name != name)
-  };
-};
-
-type IDEState = {
-  activeFilePath?: string;
-  projectFiles: FolderItem;
-  content: ContentMapping;
-};
-
-const reducer = (prev: IDEState, evt: Evt): IDEState =>
-  Evt.match<IDEState>(evt, {
-    SelectFile: path => ({ ...prev, activeFilePath: path }),
-
-    SaveContent: (path, content) => ({
-      ...prev,
-      content: { ...prev.content, [path]: content }
-    }),
-
-    AddFile: name => ({
-      ...prev,
-      projectFiles: insert(prev.projectFiles, name),
-      activeFilePath: name,
-      content: { ...prev.content, [name]: "" }
-    }),
-
-    DeleteFile: path => {
-      return {
-        ...prev,
-        projectFiles: deleteItem(prev.projectFiles, path),
-        activeFilePath: name
-        // content: { ...prev.content, [name]: "" }
-      };
-    }
-  });
-
-const initialProjectFiles: FolderItem = {
-  tag: "folder",
-  name: "root",
-  children: [
-    {
-      tag: "file",
-      name: "index.ts"
-    },
-
-    {
-      tag: "folder",
-      name: "src",
-      children: [
-        {
-          tag: "file",
-          name: "somethingElse.ts"
-        }
-      ]
-    }
-  ]
-};
-
-const initialContent: ContentMapping = {
-  "index.ts": "const bla = 1;",
-  "src/somethingElse.ts": 'console.log("Hello");'
+  return projectFileReducer(
+    p,
+    Evt.SaveContent(fileId, 'console.log("Hello world!")')
+  );
 };
 
 export const IDE: React.FC = () => {
-  const [{ activeFilePath, content, projectFiles }, dispatch] = useReducer(
-    reducer,
-    {
-      projectFiles: initialProjectFiles,
-      content: initialContent
-    }
-  );
+  const [projectModel, dispatch] = useReducer(projectFileReducer, init());
+
+  console.log("IDE render model=", projectModel);
+
+  const { selectedFile, sources, files } = projectModel;
+
   const [model, setModel] = useState<monaco.editor.ITextModel | undefined>(
     undefined
   );
   useEffect(() => {
-    if (activeFilePath !== undefined) {
+    if (selectedFile) {
       const m = monaco.editor.createModel(
-        content[activeFilePath],
+        sources.get(selectedFile)!,
         "typescript"
       );
       setModel(m);
       return () => {
         const currentContent = m.getValue();
-        m.dispose();
-        dispatch(Evt.SaveContent(activeFilePath, currentContent));
+        dispatch(Evt.SaveContent(selectedFile, currentContent));
       };
     }
-  }, [activeFilePath]);
+  }, [selectedFile]);
 
   const emit = () => {};
   // onChange({
@@ -141,25 +80,37 @@ export const IDE: React.FC = () => {
   return (
     <div className={containerLayout}>
       <div className={headerStyle}></div>
-      {model ? (
-        <Editor
-          model={model}
-          onChange={() => {
-            emit();
-          }}
-        />
-      ) : (
-        "Click on a file."
-      )}
-      <div className={previewStyle}></div>
+      <div className={editorContent}>
+        <div className={editorOpenedFiles}>
+          {selectedFile ? (
+            <span>{unsafeGetItem(files, selectedFile).name}</span>
+          ) : null}
+        </div>
+        {model ? (
+          <Monaco
+            model={model}
+            onChange={() => {
+              emit();
+            }}
+          />
+        ) : (
+          "Click on a file."
+        )}
+      </div>
+      <Preview source={source} className={previewStyle}></Preview>
       <div className={leftPanelStyle}>
-        <FilesPanel root={projectFiles} dispatch={dispatch} />
+        <FilesPanel projectFiles={projectModel} dispatch={dispatch} />
       </div>
     </div>
   );
 };
 
-const Editor: React.FC<{
+const source = `const helloWorld = document.createElement("span");
+helloWorld.innerText = "hello world";
+document.body.appendChild(helloWorld);
+console.log({ helloWorld });`;
+
+const Monaco: React.FC<{
   model: monaco.editor.ITextModel;
   onChange: () => void;
 }> = ({ model, onChange }) => {
@@ -175,13 +126,14 @@ const Editor: React.FC<{
   useEffect(() => {
     if (editor) {
       editor.setModel(model);
+      editor.focus();
       // Note: This callback has to be re-added after each setModel call.
       return editor.onDidChangeModelContent(onChange).dispose;
     }
     return undefined;
   }, [editor, model, onChange]);
 
-  return <div ref={editorContainerRef} className={editorStyle}></div>;
+  return <div ref={editorContainerRef} className={monacoStyle}></div>;
 };
 
 // const editorStyle = css({
@@ -204,10 +156,30 @@ const Sizes = {
   previewWidth: 600
 };
 
-const editorStyle = css`
+const editorContent = css`
   grid-column: editor;
   grid-row: content;
+  /* width: 100%;
+  height: 100%; */
+  display: grid;
+  /* grid-gap: 10px; */
+  grid-template-rows: [openedFiles] 25px [monaco] auto;
+  background-color: #fff;
+  color: #444;
 `;
+
+const editorOpenedFiles = css`
+  grid-row: openedFiles;
+`;
+
+const monacoStyle = css`
+  grid-row: monaco;
+`;
+
+// const editorStyle = css`
+//   grid-column: editor;
+//   grid-row: content;
+// `;
 
 const previewStyle = css`
   grid-column: preview;
