@@ -36,6 +36,7 @@
     "watch": "npx rollup -c -w",
     "dev": "npm-run-all --parallel start watch",
     "start": "serve dist",
+    "delete-js-maps": "node scripts/delete_js_maps.js",
     "test": "jest"
   },
   "jest": {
