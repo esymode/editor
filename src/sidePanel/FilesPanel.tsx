@@ -130,16 +130,26 @@ const FolderView: React.FC<{
   const toggleOpen = () => setIsOpened(!isOpened);
 
   const item = getFolder(projectFiles, folderId);
+  const isSelected = projectFiles.selectedItem === folderId;
 
   return (
     <>
       <div
         className={itemRowStyle}
-        style={{ paddingLeft: getPaddingLeft(level, "folder") }}
+        style={{
+          paddingLeft: getPaddingLeft(level, "folder"),
+          outline: isSelected ? "green solid 1px" : undefined
+        }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <div className={itemStyle} onClick={toggleOpen}>
+        <div
+          className={itemStyle}
+          onClick={() => {
+            toggleOpen();
+            dispatch(Evt.SelectItem(folderId));
+          }}
+        >
           <div className={chevronStyle} onClick={toggleOpen}>
             {isOpened ? <FaChevronDown /> : <FaChevronRight />}
           </div>
@@ -174,7 +184,13 @@ const FileView: React.FC<{
 
   const item = getFile(projectFiles, fileId);
 
-  const isSelected = projectFiles.selectedFile === fileId;
+  const isSelected = projectFiles.selectedItem === fileId;
+
+  const unsaved =
+    projectFiles.openedFiles.tag === "filled"
+      ? projectFiles.openedFiles.unsaved
+      : undefined;
+
   return (
     <div
       className={itemRowStyle}
@@ -187,13 +203,16 @@ const FileView: React.FC<{
     >
       <div
         className={itemStyle}
-        onClick={() => dispatch(Evt.SelectFile(fileId))}
+        onClick={() => dispatch(Evt.SelectItem(fileId))}
       >
         <div className={itemIconStyle}>
           <FaFile />
         </div>
 
-        <span role="button">{item.name}</span>
+        <span role="button">
+          {unsaved?.has(fileId) ? "* " : null}
+          {item.name}
+        </span>
       </div>
       <div
         role="button"

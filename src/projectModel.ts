@@ -2,12 +2,14 @@ import { of, Union } from "ts-union";
 import { Map as Dict } from "immutable";
 
 export const Evt = Union({
-  SelectFile: of<FileId>(),
-  AddFile: of<string, FolderId | undefined>(),
-  AddFolder: of<string, FolderId | undefined>(),
+  SelectItem: of<FileId | FolderId>(),
+  AddFile: of<string>(),
+  AddFolder: of<string>(),
   SaveContent: of<FileId, string>(),
   DeleteFileOrFolder: of<FileId | FolderId>(),
-  SwitchToTab: of<FileId>()
+  SwitchToTab: of<FileId>(),
+  MarkFileDrity: of<FileId>(),
+  PersistUnsavedChanges: of<FileId, string>()
 });
 
 export type Evt = typeof Evt.T;
@@ -31,7 +33,7 @@ interface SomeOpenedFiles {
   tag: "filled";
   activeTab: FileId;
   tabs: FileId[];
-  unsaved: Dict<FileId, string>;
+  unsaved: Dict<FileId, string | null>;
 }
 
 // export interface ProjectFiles {
@@ -90,8 +92,8 @@ const closeFileInEditor = (
 };
 
 export type ProjectModel = {
-  version: number;
-  selectedFile: FileId | null;
+  nextId: number;
+  selectedItem: FileId | FolderId | null;
   rootId: FolderId;
   files: Dict<FileId, FileItem>;
   folders: Dict<FolderId, FolderItem>;
@@ -102,9 +104,9 @@ export type ProjectModel = {
 export const createProjectFiles = (): ProjectModel => {
   const rootId = genFolderId(0);
   return {
-    version: 1,
+    nextId: 1,
     rootId,
-    selectedFile: null,
+    selectedItem: null,
     files: Dict(),
     folders: Dict<FolderId, FolderItem>().set(rootId, {
       children: [],
@@ -130,35 +132,74 @@ export const getFolder = (
   folderId: FolderId
 ): FolderItem => unsafeGetItem(project.folders, folderId);
 
+const findParentFolder = (
+  folders: Dict<FolderId, FolderItem>,
+  start: FolderId,
+  fileId: FileId
+): FolderId | undefined => {
+  const folder = unsafeGetItem(folders, start);
+
+  for (const child of folder.children) {
+    if (child === fileId) return start;
+
+    const candidate = isFile(child)
+      ? undefined
+      : findParentFolder(folders, child, fileId);
+
+    if (candidate) return candidate;
+  }
+
+  return undefined;
+};
+
 export const updateProjectModel = (
   prev: ProjectModel,
   evt: Evt
 ): ProjectModel =>
   Evt.match<ProjectModel>(evt, {
-    SelectFile: (id): ProjectModel => ({
+    SelectItem: (id): ProjectModel => ({
       ...prev,
-      selectedFile: id,
-      openedFiles: openFileInEditor(prev.openedFiles, id)
+      selectedItem: id,
+      openedFiles: isFile(id)
+        ? openFileInEditor(prev.openedFiles, id)
+        : prev.openedFiles
     }),
 
     SaveContent: (fileId, source) => {
+      // TODO this should not be mutable
+      // Also this should transfer unsaved changes to saved sources
+
       // mutable set
       prev.sources = prev.sources.set(fileId, source);
       // avoid rerender
       return prev;
     },
 
-    AddFile: (fileName, toFolderId = prev.rootId): ProjectModel => {
-      const { version, files, folders, rootId, openedFiles, sources } = prev;
+    AddFile: (fileName): ProjectModel => {
+      const {
+        nextId: version,
+        files,
+        folders,
+        rootId,
+        openedFiles,
+        sources,
+        selectedItem
+      } = prev;
       const id = genFileId(version);
+
+      const toFolderId = selectedItem
+        ? isFile(selectedItem)
+          ? findParentFolder(folders, rootId, selectedItem) || rootId
+          : selectedItem
+        : rootId;
 
       const { name, children } = unsafeGetItem(folders, toFolderId);
 
       return {
         rootId,
         sources: sources.set(id, ""),
-        selectedFile: id,
-        version: version + 1,
+        selectedItem: id,
+        nextId: version + 1,
         folders: folders.set(toFolderId, {
           name,
           children: children.concat(id)
@@ -168,15 +209,22 @@ export const updateProjectModel = (
       };
     },
 
-    AddFolder: (folderName, toFolderId = prev.rootId): ProjectModel => {
-      const { version, folders } = prev;
-      const id = genFolderId(version);
+    AddFolder: (folderName): ProjectModel => {
+      const { nextId, folders, selectedItem, rootId } = prev;
+      const id = genFolderId(nextId);
+
+      const toFolderId = selectedItem
+        ? isFile(selectedItem)
+          ? findParentFolder(folders, rootId, selectedItem) || rootId
+          : selectedItem
+        : rootId;
 
       const { name, children } = unsafeGetItem(folders, toFolderId);
 
       return {
         ...prev,
-        version: version + 1,
+        nextId: nextId + 1,
+        selectedItem: id,
         folders: folders
           .set(toFolderId, {
             name,
@@ -189,7 +237,7 @@ export const updateProjectModel = (
     DeleteFileOrFolder: (id): ProjectModel => {
       // TODO implement deleting nested files and folders
       const {
-        version,
+        nextId: version,
         files,
         folders,
         rootId,
@@ -217,13 +265,13 @@ export const updateProjectModel = (
 
       return {
         ...prev,
-        version: version + 1,
+        nextId: version + 1,
         files: newFiles,
         folders: folders.set(rootId, {
           name,
           children: children.filter(cid => cid !== id)
         }),
-        selectedFile: selected,
+        selectedItem: selected,
         openedFiles: opened
       };
     },
@@ -231,7 +279,38 @@ export const updateProjectModel = (
     SwitchToTab: (fileId): ProjectModel => {
       const { openedFiles } = prev;
       const opened = openFileInEditor(openedFiles, fileId);
-      return { ...prev, openedFiles: opened, selectedFile: opened.activeTab };
+      return { ...prev, openedFiles: opened, selectedItem: opened.activeTab };
+    },
+
+    MarkFileDrity: (fileId): ProjectModel => {
+      const { openedFiles } = prev;
+      if (openedFiles.tag === "empty") return prev;
+      const { unsaved } = openedFiles;
+
+      return {
+        ...prev,
+        openedFiles: {
+          ...openedFiles,
+          unsaved: unsaved.has(fileId) ? unsaved : unsaved.set(fileId, null)
+        }
+      };
+    },
+
+    PersistUnsavedChanges: (fileId, content): ProjectModel => {
+      const { openedFiles } = prev;
+      if (openedFiles.tag === "empty") return prev;
+
+      const { unsaved } = openedFiles;
+
+      if (!unsaved.has(fileId)) return prev;
+
+      return {
+        ...prev,
+        openedFiles: {
+          ...openedFiles,
+          unsaved: unsaved.set(fileId, content)
+        }
+      };
     }
   });
 

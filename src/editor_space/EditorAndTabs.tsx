@@ -3,13 +3,21 @@ import * as monaco from "monaco-editor";
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import { Horizontal } from "../styles";
-import { ProjectModel, unsafeGetItem, unwrapItemId } from "../projectModel";
+import {
+  ProjectModel,
+  unsafeGetItem,
+  unwrapItemId,
+  Dispatch,
+  FileId,
+  Evt
+} from "../projectModel";
 import { css } from "emotion";
 
 export const EditorAndTabs: React.FC<{
   project: ProjectModel;
+  dispatch: Dispatch;
   layoutFromParentStyle: string;
-}> = ({ project, layoutFromParentStyle }) => {
+}> = ({ project, dispatch, layoutFromParentStyle }) => {
   const { openedFiles } = project;
   return (
     <div className={layoutFromParentStyle + " " + editorContent}>
@@ -18,6 +26,7 @@ export const EditorAndTabs: React.FC<{
           ? null
           : openedFiles.tabs.map(fileId => (
               <span
+                onClick={() => dispatch(Evt.SwitchToTab(fileId))}
                 style={{
                   outline:
                     fileId === openedFiles.activeTab
@@ -26,18 +35,25 @@ export const EditorAndTabs: React.FC<{
                 }}
                 key={unwrapItemId(fileId)}
               >
+                {openedFiles.unsaved.has(fileId) ? "* " : null}
                 {unsafeGetItem(project.files, fileId).name}
               </span>
             ))}
       </Horizontal>
       {useMemo(() => {
-        return openedFiles.tag === "empty" ? (
-          "select a file"
-        ) : (
+        if (openedFiles.tag === "empty") return "select a file";
+
+        const { activeTab, unsaved } = openedFiles;
+
+        const content =
+          unsaved.get(activeTab) ??
+          project.sources.get(openedFiles.activeTab, "");
+
+        return (
           <Monaco
-            content={project.sources.get(openedFiles.activeTab, "")}
-            markDirty={() => {}}
-            persistContent={() => {}}
+            fileId={openedFiles.activeTab}
+            content={content}
+            dispatch={dispatch}
           />
         );
       }, [
@@ -49,10 +65,10 @@ export const EditorAndTabs: React.FC<{
 };
 
 const Monaco: React.FC<{
+  fileId: FileId;
   content: string;
-  markDirty: () => void;
-  persistContent: (content: string) => void;
-}> = ({ content, persistContent, markDirty }) => {
+  dispatch: Dispatch;
+}> = ({ content, fileId, dispatch }) => {
   // console.log(">> render ", { content });
 
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
@@ -77,7 +93,7 @@ const Monaco: React.FC<{
     const m = monaco.editor.createModel(content, "typescript");
     setModel(m);
     return () => {
-      persistContent(m.getValue());
+      dispatch(Evt.PersistUnsavedChanges(fileId, m.getValue()));
       // console.log(">> model disposed for ", { content }, m?.id);
       m.dispose();
     };
@@ -100,10 +116,13 @@ const Monaco: React.FC<{
       editor.setModel(model);
       editor.focus();
 
-      return () => {
-        // console.log(">> unset editor ", logMarker, model.id);
-        return editor.onDidChangeModelContent(markDirty).dispose();
-      };
+      // console.log(">> unset editor ", logMarker, model.id);
+
+      const sub = editor.onDidChangeModelContent(() =>
+        dispatch(Evt.MarkFileDrity(fileId))
+      );
+
+      return () => sub.dispose();
     }
     return undefined;
   }, [editor, model]);

@@ -42,6 +42,7 @@ export const IDE: React.FC = () => {
     <div className={containerLayout}>
       <div className={headerStyle}></div>
       <EditorAndTabs
+        dispatch={dispatch}
         project={projectModel}
         layoutFromParentStyle={editorContent}
       />
