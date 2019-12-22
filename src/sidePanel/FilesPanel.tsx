@@ -8,9 +8,10 @@ import {
   FaFolder,
   FaFolderOpen,
   FaChevronDown,
-  FaPlusCircle,
   FaTrash,
-  FaChevronRight
+  FaChevronRight,
+  FaFolderPlus,
+  FaPlusSquare
 } from "react-icons/fa";
 import {
   Dispatch,
@@ -23,7 +24,8 @@ import {
   getFile,
   getFolder,
   unsafeGetItem
-} from "../projectFilesModel";
+} from "../projectModel";
+import { Horizontal, IconBtn } from "src/styles";
 
 // const panelStyle = css`
 //   flex: 1;
@@ -54,16 +56,28 @@ export const FilesPanel: React.FC<{
   const { children } = unsafeGetItem(folders, rootId);
   return (
     <div className={panelStyle}>
-      <button
-        onClick={() => {
-          const filename = prompt("Filename?");
-          if (filename) {
-            dispatch(Evt.AddFile(filename, undefined));
-          }
-        }}
-      >
-        <FaPlusCircle /> New file
-      </button>
+      <Horizontal>
+        <IconBtn
+          text="File"
+          Icon={FaPlusSquare}
+          onClick={() => {
+            const filename = prompt("File name?");
+            if (filename) {
+              dispatch(Evt.AddFile(filename, undefined));
+            }
+          }}
+        />
+        <IconBtn
+          text="Folder"
+          Icon={FaFolderPlus}
+          onClick={() => {
+            const foldername = prompt("Folder name?");
+            if (foldername) {
+              dispatch(Evt.AddFolder(foldername, undefined));
+            }
+          }}
+        />
+      </Horizontal>
 
       {renderChildren(children, 0, projectFiles, dispatch)}
     </div>

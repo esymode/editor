@@ -1,17 +1,12 @@
 import * as React from "react";
 
-import * as monaco from "monaco-editor";
 import { css } from "emotion";
 
-import { useState, useEffect, useRef, useReducer } from "react";
+import { useReducer } from "react";
 import { FilesPanel } from "./sidePanel/FilesPanel";
-import {
-  Evt,
-  createProjectFiles,
-  projectFileReducer,
-  unsafeGetItem
-} from "./projectFilesModel";
+import { Evt, createProjectFiles, updateProjectModel } from "./projectModel";
 import { Preview } from "./preview";
+import { EditorAndTabs } from "./editor_space/EditorAndTabs";
 // import { PackageJSON } from "./virtual-path-types";
 
 (window as any).MonacoEnvironment = {
@@ -25,78 +20,31 @@ import { Preview } from "./preview";
 };
 
 const init = () => {
-  let p = projectFileReducer(
+  let p = updateProjectModel(
     createProjectFiles(),
     Evt.AddFile("index.ts", undefined)
   );
 
   const fileId = p.files.findKey(fi => fi.name === "index.ts")!;
 
-  return projectFileReducer(
+  return updateProjectModel(
     p,
     Evt.SaveContent(fileId, 'console.log("Hello world!")')
   );
 };
 
 export const IDE: React.FC = () => {
-  const [projectModel, dispatch] = useReducer(projectFileReducer, init());
+  const [projectModel, dispatch] = useReducer(updateProjectModel, init());
 
   console.log("IDE render model=", projectModel);
-
-  const { selectedFile, sources, files } = projectModel;
-
-  const [model, setModel] = useState<monaco.editor.ITextModel | undefined>(
-    undefined
-  );
-  useEffect(() => {
-    if (selectedFile) {
-      const m = monaco.editor.createModel(
-        sources.get(selectedFile)!,
-        "typescript"
-      );
-      setModel(m);
-      return () => {
-        const currentContent = m.getValue();
-        dispatch(Evt.SaveContent(selectedFile, currentContent));
-      };
-    }
-  }, [selectedFile]);
-
-  const emit = () => {};
-  // onChange({
-  //   files: models.map(({ name, model }) => ({
-  //     name,
-  //     content: model.getValue()
-  //   })),
-  //   entry
-  //   // packageJson: initial.packageJson
-  // });
-
-  // Initial compilation
-  useEffect(() => {
-    emit();
-  }, []);
 
   return (
     <div className={containerLayout}>
       <div className={headerStyle}></div>
-      <div className={editorContent}>
-        <div className={editorOpenedFiles}>
-          {selectedFile ? (
-            <span>{unsafeGetItem(files, selectedFile).name}</span>
-          ) : null}
-        </div>
-        {model ? (
-          <Monaco
-            model={model}
-            onChange={() => {
-              emit();
-            }}
-          />
-        ) : (
-          "Click on a file."
-        )}
-      </div>
+      <EditorAndTabs
+        project={projectModel}
+        layoutFromParentStyle={editorContent}
+      />
       <Preview source={source} className={previewStyle}></Preview>
       <div className={leftPanelStyle}>
         <FilesPanel projectFiles={projectModel} dispatch={dispatch} />
@@ -109,32 +57,6 @@ const source = `const helloWorld = document.createElement("span");
 helloWorld.innerText = "hello world";
 document.body.appendChild(helloWorld);
 console.log({ helloWorld });`;
-
-const Monaco: React.FC<{
-  model: monaco.editor.ITextModel;
-  onChange: () => void;
-}> = ({ model, onChange }) => {
-  const editorContainerRef = useRef<HTMLDivElement | null>(null);
-  const [editor, setEditor] = useState<monaco.editor.ICodeEditor | null>(null);
-
-  useEffect(() => {
-    const e = monaco.editor.create(editorContainerRef.current!);
-    setEditor(e);
-    return e.dispose;
-  }, []);
-
-  useEffect(() => {
-    if (editor) {
-      editor.setModel(model);
-      editor.focus();
-      // Note: This callback has to be re-added after each setModel call.
-      return editor.onDidChangeModelContent(onChange).dispose;
-    }
-    return undefined;
-  }, [editor, model, onChange]);
-
-  return <div ref={editorContainerRef} className={monacoStyle}></div>;
-};
 
 // const editorStyle = css({
 //   width: "100%",
@@ -156,30 +78,15 @@ const Sizes = {
   previewWidth: 600
 };
 
-const editorContent = css`
-  grid-column: editor;
-  grid-row: content;
-  /* width: 100%;
-  height: 100%; */
-  display: grid;
-  /* grid-gap: 10px; */
-  grid-template-rows: [openedFiles] 25px [monaco] auto;
-  background-color: #fff;
-  color: #444;
-`;
-
-const editorOpenedFiles = css`
-  grid-row: openedFiles;
-`;
-
-const monacoStyle = css`
-  grid-row: monaco;
-`;
-
 // const editorStyle = css`
 //   grid-column: editor;
 //   grid-row: content;
 // `;
+
+const editorContent = css`
+  grid-column: editor;
+  grid-row: content;
+`;
 
 const previewStyle = css`
   grid-column: preview;

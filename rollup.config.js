@@ -35,6 +35,7 @@ export default {
           "useState",
           "useEffect",
           "useRef",
+          "useMemo",
           "useReducer",
           "Fragment",
           "createContext",
