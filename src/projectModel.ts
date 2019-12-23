@@ -102,9 +102,9 @@ export type ProjectModel = {
 };
 
 export const createProjectFiles = (): ProjectModel => {
-  const rootId = genFolderId(0);
+  const rootId = genFolderId(1);
   return {
-    nextId: 1,
+    nextId: 2,
     rootId,
     selectedItem: null,
     files: Dict(),
@@ -135,21 +135,69 @@ export const getFolder = (
 const findParentFolder = (
   folders: Dict<FolderId, FolderItem>,
   start: FolderId,
-  fileId: FileId
+  id: FileId | FolderId
 ): FolderId | undefined => {
   const folder = unsafeGetItem(folders, start);
 
   for (const child of folder.children) {
-    if (child === fileId) return start;
+    if (child === id) return start;
 
     const candidate = isFile(child)
       ? undefined
-      : findParentFolder(folders, child, fileId);
+      : findParentFolder(folders, child, id);
 
     if (candidate) return candidate;
   }
 
   return undefined;
+};
+
+const DeleteCommand = Union({
+  Folder: of<FolderId, FolderId>(),
+  File: of<FileId, FolderId>()
+});
+type DeleteCommand = typeof DeleteCommand.T;
+
+const aggregateAllNestedItemsToDelete = (
+  folders: Dict<FolderId, FolderItem>,
+  start: FolderId,
+  parent: FolderId
+): DeleteCommand[] =>
+  unsafeGetItem(folders, start).children.reduce(
+    (cmds, child) =>
+      cmds.concat(
+        isFile(child)
+          ? DeleteCommand.File(child, start)
+          : aggregateAllNestedItemsToDelete(folders, child, start)
+      ),
+    [DeleteCommand.Folder(start, parent)]
+  );
+
+const collectAllFilesAndFoldersToDelete = (
+  id: FileId | FolderId,
+  project: ProjectModel
+): DeleteCommand[] => {
+  const { folders, rootId } = project;
+
+  const parent =
+    findParentFolder(folders, rootId, id) ??
+    fail(`couldn't find parent for ${id}`);
+
+  return isFile(id)
+    ? [DeleteCommand.File(id, parent)]
+    : aggregateAllNestedItemsToDelete(folders, id, parent);
+};
+
+const removeChild = (
+  parent: FolderItem,
+  id: FolderId | FileId
+): FolderItem => ({
+  name: parent.name,
+  children: parent.children.filter(cid => cid !== id)
+});
+
+const fail = (reason: string): never => {
+  throw new Error(reason);
 };
 
 export const updateProjectModel = (
@@ -235,44 +283,71 @@ export const updateProjectModel = (
     },
 
     DeleteFileOrFolder: (id): ProjectModel => {
-      // TODO implement deleting nested files and folders
-      const {
-        nextId: version,
-        files,
-        folders,
-        rootId,
-        // selectedFile,
-        openedFiles
-      } = prev;
-      const { name, children } = unsafeGetItem(folders, rootId);
+      // all of these references might be mutated, thus "let"
+      let { files, folders, sources, selectedItem, openedFiles } = prev;
 
-      if (!children.find(cid => cid === id) || !isFile(id)) {
-        throw new Error(
-          "at the moment you can only delete files at the root level (not folders or nested files)"
-        );
+      const deleteCmds = collectAllFilesAndFoldersToDelete(id, prev);
+      let openedTab: FileId | null = null;
+
+      // console.log("$$", { id, prev });
+
+      // mutation block
+      for (const cmd of deleteCmds) {
+        DeleteCommand.match(cmd, {
+          Folder: (folderId, parentId) => {
+            folders = folders.delete(folderId);
+
+            // todo this is copypaste from below
+            const parent = folders.get(parentId);
+            if (parent !== undefined) {
+              folders = folders.set(parentId, removeChild(parent, folderId));
+            }
+
+            if (selectedItem === folderId) selectedItem = null;
+          },
+
+          File: (fileId, parentId) => {
+            // todo this is copypaste from above
+            const parent = folders.get(parentId);
+            if (parent !== undefined) {
+              folders = folders.set(parentId, removeChild(parent, fileId));
+            }
+
+            files = files.delete(fileId);
+            sources = sources.delete(fileId);
+            [openedFiles, openedTab] = closeFileInEditor(openedFiles, fileId);
+
+            if (selectedItem === fileId) selectedItem = null;
+          }
+        });
       }
 
-      const newFiles = files.delete(id);
-
-      let [opened, selected] = closeFileInEditor(openedFiles, id);
-
-      if (selected === null) {
-        if (newFiles.size > 0) {
-          selected = newFiles.findKey(() => true)!;
-          opened = openFileInEditor(opened, selected);
+      // if we close selected tab by deleting a file reselect the first one
+      if (openedTab === null) {
+        if (openedFiles.tag === "filled" && openedFiles.tabs.length > 0) {
+          openedTab = openedFiles.tabs[0];
+          openedFiles = openFileInEditor(openedFiles, openedTab);
         }
       }
 
+      // console.log("$$", {
+      //   id,
+      //   files,
+      //   folders,
+      //   sources,
+      //   openedFiles
+      // });
+
       return {
         ...prev,
-        nextId: version + 1,
-        files: newFiles,
-        folders: folders.set(rootId, {
-          name,
-          children: children.filter(cid => cid !== id)
-        }),
-        selectedItem: selected,
-        openedFiles: opened
+        nextId: prev.nextId + 1,
+        files,
+        folders,
+        sources,
+        // if we deleted selected item reselect the one in tabs instead
+        // TODO: is this actually desired behavior?
+        selectedItem: selectedItem ?? openedTab,
+        openedFiles
       };
     },
 
