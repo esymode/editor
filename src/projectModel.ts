@@ -8,6 +8,7 @@ export const Evt = Union({
   SaveContent: of<FileId, string>(),
   DeleteFileOrFolder: of<FileId | FolderId>(),
   SwitchToTab: of<FileId>(),
+  CloseTab: of<FileId>(),
   MarkFileDrity: of<FileId>(),
   PersistUnsavedChanges: of<FileId, string>()
 });
@@ -79,16 +80,17 @@ const closeFileInEditor = (
   fileId: FileId
 ): [OpenedFiles, FileId | null] => {
   if (prev.tag === "empty") return [prev, null];
-  let { tabs, activeTab } = prev;
+  let { tabs, activeTab, unsaved } = prev;
 
   if (tabs.findIndex(t => t === fileId) < 0) return [prev, prev.activeTab];
 
   tabs = tabs.filter(t => t !== fileId);
+  unsaved = unsaved.delete(fileId);
 
   if (tabs.length === 0) return [{ tag: "empty" }, null];
 
   activeTab = activeTab === fileId ? tabs[0] : activeTab;
-  return [{ ...prev, tabs, activeTab }, activeTab];
+  return [{ tag: "filled", unsaved, tabs, activeTab }, activeTab];
 };
 
 export type ProjectModel = {
@@ -355,6 +357,11 @@ export const updateProjectModel = (
       const { openedFiles } = prev;
       const opened = openFileInEditor(openedFiles, fileId);
       return { ...prev, openedFiles: opened, selectedItem: opened.activeTab };
+    },
+
+    CloseTab: (fileId): ProjectModel => {
+      const [opened] = closeFileInEditor(prev.openedFiles, fileId);
+      return { ...prev, openedFiles: opened };
     },
 
     MarkFileDrity: (fileId): ProjectModel => {

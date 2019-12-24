@@ -12,6 +12,7 @@ import {
   Evt
 } from "../projectModel";
 import { css } from "emotion";
+import { Tab } from "./Tab";
 
 export const EditorAndTabs: React.FC<{
   project: ProjectModel;
@@ -25,19 +26,14 @@ export const EditorAndTabs: React.FC<{
         {openedFiles.tag === "empty"
           ? null
           : openedFiles.tabs.map(fileId => (
-              <span
-                onClick={() => dispatch(Evt.SwitchToTab(fileId))}
-                style={{
-                  outline:
-                    fileId === openedFiles.activeTab
-                      ? "green solid 1px"
-                      : undefined
-                }}
+              <Tab
+                fileId={fileId}
                 key={unwrapItemId(fileId)}
-              >
-                {openedFiles.unsaved.has(fileId) ? "* " : null}
-                {unsafeGetItem(project.files, fileId).name}
-              </span>
+                dispatch={dispatch}
+                isSaved={openedFiles.unsaved.has(fileId)}
+                isSelected={fileId === openedFiles.activeTab}
+                text={unsafeGetItem(project.files, fileId).name}
+              />
             ))}
       </Horizontal>
       {useMemo(() => {

@@ -11,6 +11,10 @@ const s_vertical = css`
   flex-direction: column;
 `;
 
+export const enum Color {
+  outline = "green"
+}
+
 export const Vertical: React.FC = ({ children }) => (
   <div className={s_vertical}>{children}</div>
 );

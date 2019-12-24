@@ -25,7 +25,8 @@ import {
   getFolder,
   unsafeGetItem
 } from "../projectModel";
-import { Horizontal, IconBtn } from "src/styles";
+import { Horizontal, IconBtn } from "../styles";
+import { useMouseHover } from "../shared/useMouseHover";
 
 // const panelStyle = css`
 //   flex: 1;
@@ -126,7 +127,7 @@ const FolderView: React.FC<{
   dispatch: Dispatch;
 }> = ({ projectFiles, folderId, dispatch, level = 0 }) => {
   const [isOpened, setIsOpened] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
+  const { isHovered, mouseEnter, mouseLeave } = useMouseHover();
   const toggleOpen = () => setIsOpened(!isOpened);
 
   const item = getFolder(projectFiles, folderId);
@@ -140,8 +141,8 @@ const FolderView: React.FC<{
           paddingLeft: getPaddingLeft(level, "folder"),
           outline: isSelected ? "green solid 1px" : undefined
         }}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onMouseEnter={mouseEnter}
+        onMouseLeave={mouseLeave}
       >
         <div
           className={itemStyle}
@@ -180,7 +181,7 @@ const FileView: React.FC<{
   level?: number;
   dispatch: Dispatch;
 }> = ({ projectFiles, fileId, dispatch, level = 0 }) => {
-  const [isHovered, setIsHovered] = useState(false);
+  const { isHovered, mouseEnter, mouseLeave } = useMouseHover();
 
   const item = getFile(projectFiles, fileId);
 
@@ -198,8 +199,8 @@ const FileView: React.FC<{
         paddingLeft: getPaddingLeft(level, "file"),
         outline: isSelected ? "green solid 1px" : undefined
       }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={mouseEnter}
+      onMouseLeave={mouseLeave}
     >
       <div
         className={itemStyle}
