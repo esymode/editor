@@ -27,6 +27,7 @@ export type FolderItem = {
   // tag: "folder";
   // id: FolderId;
   name: string;
+  isExpanded: boolean;
   children: (FolderId | FileId)[];
 };
 
@@ -112,7 +113,8 @@ export const createProjectFiles = (): ProjectModel => {
     files: Dict(),
     folders: Dict<FolderId, FolderItem>().set(rootId, {
       children: [],
-      name: "root"
+      name: "root",
+      isExpanded: true
     }),
     sources: Dict(),
     openedFiles: { tag: "empty" }
@@ -149,6 +151,27 @@ const findParentFolder = (
       : findParentFolder(folders, child, id);
 
     if (candidate) return candidate;
+  }
+
+  return undefined;
+};
+
+// it is a copy paste from above but a bit slower because of array shenanigans
+const findFolderHierarchy = (
+  folders: Dict<FolderId, FolderItem>,
+  start: FolderId,
+  id: FileId | FolderId
+): [FolderId, ...FolderId[]] | undefined => {
+  const folder = unsafeGetItem(folders, start);
+
+  for (const child of folder.children) {
+    if (child === id) return [start];
+
+    const candidate = isFile(child)
+      ? undefined
+      : findFolderHierarchy(folders, child, id);
+
+    if (candidate) return [start, ...candidate];
   }
 
   return undefined;
@@ -194,9 +217,20 @@ const removeChild = (
   parent: FolderItem,
   id: FolderId | FileId
 ): FolderItem => ({
-  name: parent.name,
+  ...parent,
   children: parent.children.filter(cid => cid !== id)
 });
+
+const updateInDict = <K, V>(
+  dict: Dict<K, V>,
+  key: K,
+  upd: (v: V) => V | undefined
+): Dict<K, V> => {
+  const val = dict.get(key);
+  if (val === undefined) return dict;
+  const newVal = upd(val);
+  return newVal === undefined ? dict : dict.set(key, newVal);
+};
 
 const fail = (reason: string): never => {
   throw new Error(reason);
@@ -205,26 +239,33 @@ const fail = (reason: string): never => {
 export const updateProjectModel = (
   prev: ProjectModel,
   evt: Evt
-): ProjectModel =>
-  Evt.match<ProjectModel>(evt, {
-    SelectItem: (id): ProjectModel => ({
-      ...prev,
-      selectedItem: id,
-      openedFiles: isFile(id)
-        ? openFileInEditor(prev.openedFiles, id)
-        : prev.openedFiles
-    }),
-
+): ProjectModel => {
+  const start = performance.now();
+  const res = Evt.match<ProjectModel>(evt, {
+    SelectItem: (id): ProjectModel => {
+      const { openedFiles, folders } = prev;
+      return {
+        ...prev,
+        selectedItem: id,
+        folders: isFile(id)
+          ? folders
+          : updateInDict(folders, id, f => ({
+              ...f,
+              isExpanded: !f.isExpanded
+            })),
+        openedFiles: isFile(id)
+          ? openFileInEditor(openedFiles, id)
+          : openedFiles
+      };
+    },
     SaveContent: (fileId, source) => {
       // TODO this should not be mutable
       // Also this should transfer unsaved changes to saved sources
-
       // mutable set
       prev.sources = prev.sources.set(fileId, source);
       // avoid rerender
       return prev;
     },
-
     AddFile: (fileName): ProjectModel => {
       const {
         nextId: version,
@@ -236,15 +277,12 @@ export const updateProjectModel = (
         selectedItem
       } = prev;
       const id = genFileId(version);
-
       const toFolderId = selectedItem
         ? isFile(selectedItem)
           ? findParentFolder(folders, rootId, selectedItem) || rootId
           : selectedItem
         : rootId;
-
       const { name, children } = unsafeGetItem(folders, toFolderId);
-
       return {
         rootId,
         sources: sources.set(id, ""),
@@ -252,25 +290,22 @@ export const updateProjectModel = (
         nextId: version + 1,
         folders: folders.set(toFolderId, {
           name,
+          isExpanded: true,
           children: children.concat(id)
         }),
         files: files.set(id, { name: fileName }),
         openedFiles: openFileInEditor(openedFiles, id)
       };
     },
-
     AddFolder: (folderName): ProjectModel => {
       const { nextId, folders, selectedItem, rootId } = prev;
       const id = genFolderId(nextId);
-
       const toFolderId = selectedItem
         ? isFile(selectedItem)
           ? findParentFolder(folders, rootId, selectedItem) || rootId
           : selectedItem
         : rootId;
-
       const { name, children } = unsafeGetItem(folders, toFolderId);
-
       return {
         ...prev,
         nextId: nextId + 1,
@@ -278,52 +313,43 @@ export const updateProjectModel = (
         folders: folders
           .set(toFolderId, {
             name,
+            isExpanded: true,
             children: children.concat(id)
           })
-          .set(id, { name: folderName, children: [] })
+          .set(id, { name: folderName, children: [], isExpanded: true })
       };
     },
-
     DeleteFileOrFolder: (id): ProjectModel => {
       // all of these references might be mutated, thus "let"
       let { files, folders, sources, selectedItem, openedFiles } = prev;
-
       const deleteCmds = collectAllFilesAndFoldersToDelete(id, prev);
       let openedTab: FileId | null = null;
-
       // console.log("$$", { id, prev });
-
       // mutation block
       for (const cmd of deleteCmds) {
         DeleteCommand.match(cmd, {
           Folder: (folderId, parentId) => {
             folders = folders.delete(folderId);
-
             // todo this is copypaste from below
             const parent = folders.get(parentId);
             if (parent !== undefined) {
               folders = folders.set(parentId, removeChild(parent, folderId));
             }
-
             if (selectedItem === folderId) selectedItem = null;
           },
-
           File: (fileId, parentId) => {
             // todo this is copypaste from above
             const parent = folders.get(parentId);
             if (parent !== undefined) {
               folders = folders.set(parentId, removeChild(parent, fileId));
             }
-
             files = files.delete(fileId);
             sources = sources.delete(fileId);
             [openedFiles, openedTab] = closeFileInEditor(openedFiles, fileId);
-
             if (selectedItem === fileId) selectedItem = null;
           }
         });
       }
-
       // if we close selected tab by deleting a file reselect the first one
       if (openedTab === null) {
         if (openedFiles.tag === "filled" && openedFiles.tabs.length > 0) {
@@ -331,7 +357,6 @@ export const updateProjectModel = (
           openedFiles = openFileInEditor(openedFiles, openedTab);
         }
       }
-
       // console.log("$$", {
       //   id,
       //   files,
@@ -339,7 +364,6 @@ export const updateProjectModel = (
       //   sources,
       //   openedFiles
       // });
-
       return {
         ...prev,
         nextId: prev.nextId + 1,
@@ -352,11 +376,30 @@ export const updateProjectModel = (
         openedFiles
       };
     },
-
     SwitchToTab: (fileId): ProjectModel => {
-      const { openedFiles } = prev;
-      const opened = openFileInEditor(openedFiles, fileId);
-      return { ...prev, openedFiles: opened, selectedItem: opened.activeTab };
+      // note that referece itself is mutable but data structures are immutable
+      let { openedFiles, folders, rootId } = prev;
+      openedFiles = openFileInEditor(openedFiles, fileId);
+      // auto expand on switching a tab
+      const path = findFolderHierarchy(folders, rootId, fileId);
+
+      // console.log("##", { path, folders });
+      if (path) {
+        folders = folders.withMutations(fs =>
+          path.forEach(folderId =>
+            updateInDict(fs, folderId, f =>
+              f.isExpanded ? undefined : { ...f, isExpanded: true }
+            )
+          )
+        );
+      }
+      // console.log("##", { folders });
+      return {
+        ...prev,
+        openedFiles,
+        folders,
+        selectedItem: openedFiles.activeTab
+      };
     },
 
     CloseTab: (fileId): ProjectModel => {
@@ -368,7 +411,6 @@ export const updateProjectModel = (
       const { openedFiles } = prev;
       if (openedFiles.tag === "empty") return prev;
       const { unsaved } = openedFiles;
-
       return {
         ...prev,
         openedFiles: {
@@ -377,15 +419,11 @@ export const updateProjectModel = (
         }
       };
     },
-
     PersistUnsavedChanges: (fileId, content): ProjectModel => {
       const { openedFiles } = prev;
       if (openedFiles.tag === "empty") return prev;
-
       const { unsaved } = openedFiles;
-
       if (!unsaved.has(fileId)) return prev;
-
       return {
         ...prev,
         openedFiles: {
@@ -395,6 +433,13 @@ export const updateProjectModel = (
       };
     }
   });
+
+  const duration = performance.now() - start;
+
+  console.log("projectModel update evt=", evt, `took=${duration}ms`);
+
+  return res;
+};
 
 // new types to mark files and folders
 export interface FileId {

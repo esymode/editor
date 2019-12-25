@@ -20,10 +20,7 @@ import { EditorAndTabs } from "./editor_space/EditorAndTabs";
 };
 
 const init = () => {
-  let p = updateProjectModel(
-    createProjectFiles(),
-    Evt.AddFile("index.ts", undefined)
-  );
+  let p = updateProjectModel(createProjectFiles(), Evt.AddFile("index.ts"));
 
   const fileId = p.files.findKey(fi => fi.name === "index.ts")!;
 
@@ -33,8 +30,10 @@ const init = () => {
   );
 };
 
+const initial = init();
+
 export const IDE: React.FC = () => {
-  const [projectModel, dispatch] = useReducer(updateProjectModel, init());
+  const [projectModel, dispatch] = useReducer(updateProjectModel, initial);
 
   console.log("IDE render model=", projectModel);
 
