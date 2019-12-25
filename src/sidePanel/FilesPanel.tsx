@@ -64,7 +64,7 @@ export const FilesPanel: React.FC<{
           onClick={() => {
             const filename = prompt("File name?");
             if (filename) {
-              dispatch(Evt.AddFile(filename, undefined));
+              dispatch(Evt.AddFile(filename));
             }
           }}
         />
@@ -74,7 +74,7 @@ export const FilesPanel: React.FC<{
           onClick={() => {
             const foldername = prompt("Folder name?");
             if (foldername) {
-              dispatch(Evt.AddFolder(foldername, undefined));
+              dispatch(Evt.AddFolder(foldername));
             }
           }}
         />
@@ -126,12 +126,13 @@ const FolderView: React.FC<{
   level?: number;
   dispatch: Dispatch;
 }> = ({ projectFiles, folderId, dispatch, level = 0 }) => {
-  const [isOpened, setIsOpened] = useState(false);
   const { isHovered, mouseEnter, mouseLeave } = useMouseHover();
-  const toggleOpen = () => setIsOpened(!isOpened);
 
   const item = getFolder(projectFiles, folderId);
   const isSelected = projectFiles.selectedItem === folderId;
+
+  const { isExpanded } = item;
+  const selectFolder = () => dispatch(Evt.SelectItem(folderId));
 
   return (
     <>
@@ -144,19 +145,13 @@ const FolderView: React.FC<{
         onMouseEnter={mouseEnter}
         onMouseLeave={mouseLeave}
       >
-        <div
-          className={itemStyle}
-          onClick={() => {
-            toggleOpen();
-            dispatch(Evt.SelectItem(folderId));
-          }}
-        >
-          <div className={chevronStyle} onClick={toggleOpen}>
-            {isOpened ? <FaChevronDown /> : <FaChevronRight />}
+        <div className={itemStyle} onClick={selectFolder}>
+          <div className={chevronStyle}>
+            {isExpanded ? <FaChevronDown /> : <FaChevronRight />}
           </div>
 
           <div className={itemIconStyle}>
-            {isOpened ? <FaFolderOpen /> : <FaFolder />}
+            {isExpanded ? <FaFolderOpen /> : <FaFolder />}
           </div>
 
           <span role="button">{item.name}</span>
@@ -170,7 +165,8 @@ const FolderView: React.FC<{
         </div>
       </div>
 
-      {isOpened && renderChildren(item.children, level, projectFiles, dispatch)}
+      {isExpanded &&
+        renderChildren(item.children, level, projectFiles, dispatch)}
     </>
   );
 };
