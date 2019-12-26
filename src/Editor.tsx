@@ -35,7 +35,7 @@ const initial = init();
 export const IDE: React.FC = () => {
   const [projectModel, dispatch] = useReducer(updateProjectModel, initial);
 
-  console.log("IDE render model=", projectModel);
+  // console.log("IDE render model=", projectModel);
 
   return (
     <div className={containerLayout}>

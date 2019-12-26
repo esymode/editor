@@ -258,17 +258,28 @@ export const updateProjectModel = (
           : openedFiles
       };
     },
+
     SaveContent: (fileId, source) => {
-      // TODO this should not be mutable
-      // Also this should transfer unsaved changes to saved sources
-      // mutable set
-      prev.sources = prev.sources.set(fileId, source);
-      // avoid rerender
-      return prev;
+      const { openedFiles, sources } = prev;
+
+      const opened =
+        openedFiles.tag === "filled" && openedFiles.unsaved.has(fileId)
+          ? {
+              ...openedFiles,
+              unsaved: openedFiles.unsaved.delete(fileId)
+            }
+          : openedFiles;
+
+      return {
+        ...prev,
+        openedFiles: opened,
+        sources: sources.set(fileId, source)
+      };
     },
+
     AddFile: (fileName): ProjectModel => {
       const {
-        nextId: version,
+        nextId,
         files,
         folders,
         rootId,
@@ -276,7 +287,7 @@ export const updateProjectModel = (
         sources,
         selectedItem
       } = prev;
-      const id = genFileId(version);
+      const id = genFileId(nextId);
       const toFolderId = selectedItem
         ? isFile(selectedItem)
           ? findParentFolder(folders, rootId, selectedItem) || rootId
@@ -287,7 +298,7 @@ export const updateProjectModel = (
         rootId,
         sources: sources.set(id, ""),
         selectedItem: id,
-        nextId: version + 1,
+        nextId: nextId + 1,
         folders: folders.set(toFolderId, {
           name,
           isExpanded: true,

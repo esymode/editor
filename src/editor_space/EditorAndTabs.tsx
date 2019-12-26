@@ -93,7 +93,7 @@ const Monaco: React.FC<{
       // console.log(">> model disposed for ", { content }, m?.id);
       m.dispose();
     };
-  }, [content]);
+  }, [fileId]);
 
   // finally set the attach model to the editor once we have both
   useEffect(() => {
@@ -122,6 +122,19 @@ const Monaco: React.FC<{
     }
     return undefined;
   }, [editor, model]);
+
+  // CMD + S listener
+  useEffect(() => {
+    const listener = (event: WindowEventMap["keydown"]) => {
+      const S_KEY = 83;
+      if (event.keyCode == S_KEY && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        if (model) dispatch(Evt.SaveContent(fileId, model.getValue()));
+      }
+    };
+    window.addEventListener("keydown", listener, false);
+    return () => window.removeEventListener("keydown", listener);
+  }, [dispatch, fileId, model]);
 
   return <div ref={editorContainerRef} className={monacoStyle}></div>;
 };
