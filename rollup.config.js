@@ -1,9 +1,9 @@
-import resolve from "rollup-plugin-node-resolve";
-import commonjs from "rollup-plugin-commonjs";
+import resolve from "@rollup/plugin-node-resolve";
+import commonjs from "@rollup/plugin-commonjs";
+import ts from "@rollup/plugin-typescript";
+import replace from "@rollup/plugin-replace";
+
 import { terser } from "rollup-plugin-terser";
-import ts from "rollup-plugin-typescript";
-import replace from "rollup-plugin-replace";
-// import linaria from "linaria/rollup";
 import css from "rollup-plugin-css-only";
 
 // `npm run build` -> `production` is true
@@ -14,10 +14,20 @@ const production = !process.env.ROLLUP_WATCH;
 // process.env.NODE_ENV = "development";
 
 export default {
-  input: "src/main.tsx",
+  input: {
+    main: "src/main.tsx"
+    // "editor.worker":
+    //   "node_modules/monaco-editor/esm/vs/editor/editor.worker.js",
+    // "json.worker":
+    //   "node_modules/monaco-editor/esm/vs/language/json/json.worker",
+    // // "css.worker": "node_modules/monaco-editor/esm/vs/language/css/css.worker",
+    // // "html.worker": "node_modules/monaco-editor/esm/vs/language/html/html.worker",
+    // "ts.worker":
+    //   "node_modules/monaco-editor/esm/vs/language/typescript/ts.worker"
+  },
   output: {
     dir: "dist",
-    format: "module",
+    format: "esm",
     sourcemap: true
   },
   plugins: [
@@ -25,7 +35,7 @@ export default {
       "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV)
     }),
     ts(),
-    resolve(),
+    resolve({}),
     commonjs({
       namedExports: {
         react: [

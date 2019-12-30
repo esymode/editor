@@ -9,16 +9,6 @@ import { Preview } from "./preview";
 import { EditorAndTabs } from "./editor_space/EditorAndTabs";
 // import { PackageJSON } from "./virtual-path-types";
 
-(window as any).MonacoEnvironment = {
-  getWorkerUrl: function(workerId: string, label: string) {
-    return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
-            self.MonacoEnvironment = {
-              baseUrl: 'http://www.unpkg.com/monaco-editor/dev/'
-            };
-            importScripts('http://www.unpkg.com/monaco-editor/dev/vs/base/worker/workerMain.js');`)}`;
-  }
-};
-
 const init = () => {
   let p = updateProjectModel(createProjectFiles(), Evt.AddFile("index.ts"));
 
