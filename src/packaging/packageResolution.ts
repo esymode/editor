@@ -1,7 +1,12 @@
 import { DepsLock, SemVerRange, ExplicitDeps, Version } from "../workspace";
+import * as maxSatisfying from "semver/ranges/max-satisfying";
+import { Err, Ok, allResult } from "../functionalNonsense";
 
 export type PackageJSON = {
   dependencies?: {
+    [name: string]: SemVerRange;
+  };
+  peerDependencies?: {
     [name: string]: SemVerRange;
   };
 };
@@ -36,9 +41,14 @@ export type ResolutionReadyToResume = {
   fetchedPackageJsonRequests: [FetchPackageJsonRequest, PackageJSON][];
   state: PackageResolutionState;
 };
-export type ResolutionDone = {
-  stage: "done";
+export type ResolutionSuccess = {
+  stage: "done-success";
   lock: DepsLock;
+};
+
+export type ResolutionFailed = {
+  stage: "done-error";
+  err: string;
 };
 
 const reqSemverId = ({ name, semver }: ResolveSemverRequest) =>
@@ -59,11 +69,12 @@ const dedupe = <T>(xs: T[], key: (_: T) => string): T[] =>
 
 export const lockFromExplicitDeps = (
   step: StartOfResolution | ResolutionReadyToResume
-): ResolutionPausedForIO | ResolutionDone => {
+): ResolutionPausedForIO | ResolutionSuccess | ResolutionFailed => {
   type RealStateType = {
     // {"react@16.11.0", "scheduler@1.4.0"}
     packageJsonFetchDone: Set<string>;
     pendingIo: Set<string>;
+    peerDepsSemVerRanges: Set<[string, SemVerRange]>;
     partialDepsLock: DepsLock;
   };
 
@@ -76,6 +87,7 @@ export const lockFromExplicitDeps = (
     const state: RealStateType = {
       packageJsonFetchDone: new Set(),
       pendingIo: new Set(initialSemverRequests.map(reqSemverId)),
+      peerDepsSemVerRanges: new Set(),
       partialDepsLock: {}
     };
     return {
@@ -117,6 +129,13 @@ export const lockFromExplicitDeps = (
     ({ name, semver }) => `${name}@${semver}`
   );
 
+  const newPeerDeps = ([] as [string, SemVerRange][]).concat(
+    ...step.fetchedPackageJsonRequests.map(([, { peerDependencies = {} }]) =>
+      Object.entries(peerDependencies)
+    )
+  );
+  newPeerDeps.forEach(dep => internalState.peerDepsSemVerRanges.add(dep));
+
   step.resolvedSemVerRequests.forEach(([req]) =>
     internalState.pendingIo.delete(reqSemverId(req))
   );
@@ -146,7 +165,36 @@ export const lockFromExplicitDeps = (
   );
 
   if (internalState.pendingIo.size === 0) {
-    return { stage: "done", lock: internalState.partialDepsLock };
+    const peerDepResolutions = Array.from(
+      internalState.peerDepsSemVerRanges.values()
+    ).map(([name, semverRange]) => {
+      const resolvedVersions = Object.entries(internalState.partialDepsLock)
+        .filter(([nameAndSemVer]) => nameAndSemVer.startsWith(name))
+        .map(([, version]) => version);
+
+      const result = maxSatisfying(resolvedVersions, semverRange);
+
+      return result
+        ? Ok([versionedPackage(name, semverRange), result] as const)
+        : Err(
+            `Could not match peerDep ${name}@${semverRange}; resolved versions were ${JSON.stringify(
+              resolvedVersions
+            )}`
+          );
+    });
+
+    const peerDeps = allResult(peerDepResolutions);
+    if (peerDeps.tag !== "Ok") {
+      return { stage: "done-error", err: peerDeps.err };
+    } else {
+      return {
+        stage: "done-success",
+        lock: {
+          ...internalState.partialDepsLock,
+          ...Object.fromEntries(peerDeps.val)
+        }
+      };
+    }
   }
 
   const newInternalState: RealStateType = {
@@ -155,6 +203,7 @@ export const lockFromExplicitDeps = (
       ...lockUpdateDoneRequests
     },
     pendingIo: internalState.pendingIo,
+    peerDepsSemVerRanges: internalState.peerDepsSemVerRanges,
     packageJsonFetchDone: internalState.packageJsonFetchDone
   };
   return {
