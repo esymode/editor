@@ -30,7 +30,7 @@ export const doPackageResolution = async (
 
   let res = lockFromExplicitDeps(input);
 
-  while (res.stage !== "done") {
+  while (res.stage !== "done-success" && res.stage !== "done-error") {
     const results = allResult(
       await Promise.all(
         res.resolveSemverRequests.map(
@@ -68,7 +68,11 @@ export const doPackageResolution = async (
     res = lockFromExplicitDeps(forResume);
   }
 
-  return Ok(res.lock);
+  if (res.stage === "done-success") {
+    return Ok(res.lock);
+  } else {
+    return Err(res.err);
+  }
 };
 
 const findMatchingVersionForSemverRange = async (
