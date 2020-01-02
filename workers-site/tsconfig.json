@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./transpiled",
+    "lib": ["esnext", "webworker"]
+    // "baseUrl": "./"
+  },
+  "exclude": ["node_modules", "__tests__", "**/__tests__", "src/__tests__"],
+  "include": [
+    "./**/*.ts",
+    "./node_modules/@cloudflare/workers-types/index.d.ts",
+    "../shared/api.ts"
+  ]
+}

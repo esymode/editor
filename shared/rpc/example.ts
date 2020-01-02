@@ -1,15 +1,13 @@
 import { U32, Str } from "ts-binary-types";
-import {
-  workerRpcClient,
-  workerRpcImpl as hostWorkerRpc
-} from "./rpc_webworker";
+import { workerRpcClient, workerRpcImpl } from "./rpc_webworker";
+import { defineProtocol } from "./rpc_definition";
 
 const Workspace = Str;
 
-const syncProtocol = {
+const syncProtocol = defineProtocol({
   getVersion: { returns: U32 },
   saveWorkspace: { arg: Workspace }
-} as const;
+});
 
 const port = 100500;
 
@@ -21,7 +19,7 @@ client.getVersion().then(version => console.log(version));
 client.saveWorkspace("content").then(() => console.log("saved"));
 
 // worker
-hostWorkerRpc(
+workerRpcImpl(
   syncProtocol,
   {
     getVersion: () => 444,
