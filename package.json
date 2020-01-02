@@ -22,7 +22,9 @@
     "typescript": "^3.7.4",
     "typescript-styled-plugin": "^0.15.0",
     "webpack": "^4.41.5",
-    "webpack-cli": "^3.3.10"
+    "webpack-cli": "^3.3.10",
+    "@cloudflare/workers-types": "^1.0.6",
+    "@cloudflare/kv-asset-handler": "^0.0.7"
   },
   "dependencies": {
     "@types/semver": "^6.2.0",
@@ -36,7 +38,8 @@
     "rollup-plugin-commonjs-fork": "git+https://git@github.com/esymode/rollup-plugin-commonjs-fork.git#11c8e966f58e3699ea9c800949e53bf19f980e19",
     "semver": "^7.1.1",
     "ts-binary-types": "^0.8.0",
-    "ts-union": "^2.1.1"
+    "ts-union": "^2.1.1",
+    "typescript-safe-router": "^1.0.2"
   },
   "scripts": {
     "build": "npx rollup -c",
@@ -45,6 +48,7 @@
     "start": "serve dist",
     "delete-js-maps": "node scripts/delete_js_maps.js",
     "build-monaco-workers": "webpack --config webpack.config.monaco-workers.js --progress",
+    "tsc-cf-worker": "tsc --build workers-site/tsconfig.json",
     "test": "jest"
   },
   "jest": {
