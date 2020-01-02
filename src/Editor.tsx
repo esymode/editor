@@ -7,6 +7,7 @@ import { FilesPanel } from "./sidePanel/FilesPanel";
 import { Evt, createProjectFiles, updateProjectModel } from "./projectModel";
 import { Preview } from "./preview";
 import { EditorAndTabs } from "./editor_space/EditorAndTabs";
+import { ProjectPicker } from "./ProjectPicker";
 // import { PackageJSON } from "./virtual-path-types";
 
 const init = () => {
@@ -29,7 +30,9 @@ export const IDE: React.FC = () => {
 
   return (
     <div className={containerLayout}>
-      <div className={headerStyle}></div>
+      <div className={headerStyle}>
+        <ProjectPicker />
+      </div>
       <EditorAndTabs
         dispatch={dispatch}
         project={projectModel}

@@ -44,3 +44,6 @@ export type ProtocolImpl<Def extends ProtocolDef> = {
     ? () => Static<Res> | Promise<Static<Res>>
     : never;
 };
+
+// at the moment just capture the type
+export const defineProtocol = <Def extends ProtocolDef>(def: Def) => def;
