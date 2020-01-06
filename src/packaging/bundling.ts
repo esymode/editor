@@ -80,7 +80,12 @@ const VirtualFilesPlugin: (
     );
   };
 
-  const resolvePath = resolveVirtualPath(getContents, lock, packageJsons);
+  const resolvePath = resolveVirtualPath(
+    getContents,
+    lock,
+    packageJsons,
+    explicitDeps
+  );
 
   return {
     name: "virtual-files-plugin",
@@ -121,8 +126,7 @@ const VirtualFilesPlugin: (
         await resolvePath(
           unsafeUnwrap(normalizePath(id)),
           id.startsWith("."),
-          importerFile.val,
-          explicitDeps
+          importerFile.val
         ),
         {
           Ok: val => (val ? serializeFile(val) : null),

@@ -9,7 +9,6 @@ import {
   createProjectFiles,
   updateProjectModel,
   isFile,
-  FileItem,
   unsafeGetItem
 } from "./projectModel";
 import { Preview } from "./preview";

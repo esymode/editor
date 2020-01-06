@@ -7,8 +7,8 @@ import {
   Result,
   unsafeUnwrap,
   bind,
-  map,
-  allResult
+  allResult,
+  asyncMap
 } from "src/functionalNonsense";
 import {
   normalizePath,
@@ -17,7 +17,7 @@ import {
   join,
   dirname
 } from "src/normalizedPath";
-import { Version, DepsLock, ExplicitDeps } from "src/workspace";
+import { Version, DepsLock, ExplicitDeps, SemVerRange } from "src/workspace";
 
 const joinFile = (file: File, name: NormalizedPath): Result<File, string> =>
   match<NormalizedPath, Result<File, string>, string>(join(file.path, name), {
@@ -142,66 +142,47 @@ const resolutionPathGuesses: (
   return Ok(attempts);
 };
 
-const ioShim = async (
-  request: File,
-  packageJsons: Map<string, PackageJSON>,
-  getContents: FetchContents
-): Promise<Result<[File, string] | null, string>> => {
-  const guesses = resolutionPathGuesses(request, packageJsons);
-  if (guesses.tag !== "Ok") {
-    return guesses;
-  }
-  for (const guess of guesses.val) {
-    const contents = await getContents(guess);
-    if (contents.tag === "Ok") {
-      return Ok([guess, contents.val]);
-    }
-  }
-
-  return Ok(null);
-};
-
-export const resolveVirtualPath: (
-  // used to check if exists
+export const resolveVirtualPath = (
   getContents: FetchContents,
-
   lock: DepsLock,
-  packageJsons: Map<string, PackageJSON>
-) => (
-  id: NormalizedPath,
-  relative: boolean,
-  importer: File | undefined,
+  packageJsons: Map<string, PackageJSON>,
   explicitDeps: ExplicitDeps
-) => Promise<Result<File | null, string>> = (
-  getContents,
-  lock,
-  packageJsons
 ) => async (
   id: NormalizedPath,
   relative: boolean,
+  importer: File | undefined
+): Promise<Result<File | null, string>> => {
+  const guesses = await resolveVirtualPathGuesses(
+    id,
+    relative,
+    importer,
+    lock,
+    packageJsons,
+    explicitDeps
+  );
+
+  return asyncMap(guesses, async guesses => {
+    for (const guess of guesses) {
+      const contents = await getContents(guess);
+      if (contents.tag === "Ok") {
+        return guess;
+      }
+    }
+    return null;
+  });
+};
+
+const resolveVirtualPathGuesses = async (
+  id: NormalizedPath,
+  relative: boolean,
   importer: File | undefined,
+  lock: DepsLock,
+  packageJsons: Map<string, PackageJSON>,
   explicitDeps: ExplicitDeps
-) => {
+): Promise<Result<File[], string>> => {
   // entry point
   if (importer === undefined) {
-    const result = await ioShim(
-      { type: "local", path: id },
-      packageJsons,
-      getContents
-    );
-    return match<[File, string] | null, Result<File | null, string>, string>(
-      result,
-      {
-        Ok: val => Ok(val && val[0]),
-        Err: e =>
-          chainErrors(
-            Err(e),
-            `Could not resolve ${id} from ${
-              importer !== undefined ? serializeFile(importer) : "undefined"
-            }`
-          )
-      }
-    );
+    return resolutionPathGuesses({ type: "local", path: id }, packageJsons);
   }
 
   // relative/local import
@@ -215,26 +196,16 @@ export const resolveVirtualPath: (
         }`
       );
     }
-    const result = await ioShim(req.val, packageJsons, getContents);
-    return match<[File, string] | null, Result<File | null, string>, string>(
-      result,
-      {
-        Ok: val => (val !== null ? Ok(val[0]) : Ok(null)),
-        Err: e =>
-          chainErrors(
-            Err(e),
-            `Could not resolve ${id} from ${
-              importer !== undefined ? serializeFile(importer) : "undefined"
-            }`
-          )
-      }
-    );
+    return resolutionPathGuesses(req.val, packageJsons);
   }
 
   // non local import
 
   // Handle stuff like babel/foo
-  // This seems hacktastic and probably won't work for everything.
+  // This seems hacktastic and probably won't work for everything; in
+  // particular, an import of a sub-path from a package with a slash in the name
+  // would break; first/last/path would be parsed as first -> last/path, instead
+  // of first/last -> path.
   const upath = unwrapNormalizedPath(id);
   const first = upath.indexOf("/");
   const [name, path] =
@@ -242,78 +213,83 @@ export const resolveVirtualPath: (
       ? [upath, ""]
       : [upath.substring(0, first), upath.substring(first + 1)];
 
-  // what we have is a package name.
-  // We need to lookup the semver range (in the appropriate package.json if we
-  // are already in a 3rd party lib, or in our own ExplicitDeps if this is a
-  // local import), and then look up that semver range in the DepsLock.
-  const nameAndSemverRange =
-    importer.type === "node_module"
-      ? (() => {
-          // where is the import from?
-          const importerSpecifier = versionedPackage(
-            importer.name,
-            importer.version
-          );
+  const semverRange = semverRangeForImport(
+    name,
+    importer,
+    packageJsons,
+    explicitDeps
+  );
 
-          // what is the package.json for where the import is from?
-          const pkg = packageJsons.get(importerSpecifier);
-          if (!pkg) {
-            return Err(
-              `packageJsons does not have an entry for ${importerSpecifier}`
-            );
-          }
-
-          if (!pkg.dependencies && !pkg.peerDependencies) {
-            return Err(
-              `packageJsons.get(${importerSpecifier}) does not have a dependency or peer dependency array, but imports ${name}`
-            );
-          }
-
-          // what does this package mean to import?
-          const semver =
-            (pkg.dependencies && pkg.dependencies[name]) ||
-            (pkg.peerDependencies && pkg.peerDependencies[name]);
-          if (!semver) {
-            return Err(
-              `package ${importerSpecifier} does not list ${name} as a dependency or peer dependency`
-            );
-          }
-
-          return Ok(versionedPackage(name, semver));
-        })()
-      : (() => {
-          const semver = explicitDeps[name];
-          if (!semver) {
-            return Err(`ExplicitDeps does not have an entry for ${name}`);
-          }
-          return Ok(versionedPackage(name, explicitDeps[name]));
-        })();
-
-  if (nameAndSemverRange.tag !== "Ok") {
-    return chainErrors(nameAndSemverRange, `Could not resolve ${id}`);
+  if (semverRange.tag !== "Ok") {
+    return chainErrors(semverRange, `Could not resolve ${id}`);
   }
 
   // now that we have the semver range, we can finally look up the version
-  const version = lock[nameAndSemverRange.val]
-    ? Ok(lock[nameAndSemverRange.val])
-    : Err(`lock does not have an entry for ${nameAndSemverRange.val}`);
+  const version = lock[semverRange.val]
+    ? Ok(lock[semverRange.val])
+    : Err(`lock does not have an entry for ${semverRange.val}`);
 
   if (version.tag !== "Ok") {
     return version;
   }
 
   // Finally, we know the exact name, version, and path to look up...
-  const file: NPMFile = {
-    type: "node_module",
-    name,
-    version: version.val,
-    path: unsafeUnwrap(normalizePath(path))
-  };
-
   // ... but we still need to do resolution to handle index.js, etc.
-  return map(await ioShim(file, packageJsons, getContents), v =>
-    v === null ? null : v[0]
+  return resolutionPathGuesses(
+    {
+      type: "node_module",
+      name,
+      version: version.val,
+      path: unsafeUnwrap(normalizePath(path))
+    },
+    packageJsons
   );
+};
+
+// Map a package name to the semver range that constraints it (for this import).
+const semverRangeForImport = (
+  target: string,
+  importer: File,
+  packageJsons: Map<string, PackageJSON>,
+  explicitDeps: DepsLock
+): Result<SemVerRange, string> => {
+  if (importer.type === "node_module") {
+    // where is the import from?
+    const importerSpecifier = versionedPackage(importer.name, importer.version);
+
+    // what is the package.json for where the import is from?
+    const pkg = packageJsons.get(importerSpecifier);
+    if (!pkg) {
+      return Err(
+        `packageJsons does not have an entry for ${importerSpecifier}`
+      );
+    }
+
+    if (!pkg.dependencies && !pkg.peerDependencies) {
+      return Err(
+        `packageJsons.get(${importerSpecifier}) does not have a dependency or peer dependency array, but imports ${target}`
+      );
+    }
+
+    // what does this package mean to import?
+    const semver =
+      (pkg.dependencies && pkg.dependencies[target]) ||
+      (pkg.peerDependencies && pkg.peerDependencies[target]);
+    if (!semver) {
+      return Err(
+        `package ${importerSpecifier} does not list ${target} as a dependency or peer dependency`
+      );
+    }
+
+    return Ok(semver);
+  } else {
+    const semver = explicitDeps[target];
+    if (!semver) {
+      return Err(`ExplicitDeps does not have an entry for ${target}`);
+    }
+
+    return Ok(semver);
+  }
 };
 
 export type LocalFile = {

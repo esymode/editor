@@ -166,6 +166,26 @@ export const unsafeUnwrap: UnsafeUnwrapFunc = ((val: unknown) => {
   throw new Error("object was not a result nor an option obj");
 }) as any;
 
+export type AsyncMapFunc = {
+  <A, B>(opt: Option<A>, f: (a: A) => Promise<B>): Promise<Option<B>>;
+  <A, B, E>(res: Result<A, E>, f: (a: A) => Promise<B>): Promise<Result<B, E>>;
+};
+
+export const asyncMap: AsyncMapFunc = (async (
+  val: unknown,
+  f: (a: any) => any
+) => {
+  if (isOption(val)) {
+    return val.tag === "Some" ? Some(await f(val.val)) : val;
+  }
+
+  if (isResult(val)) {
+    return val.tag === "Ok" ? Ok(await f((val as any).val)) : val;
+  }
+
+  throw new Error("object was not a result nor an option obj");
+}) as any;
+
 //-------------- Pipe & PipeVal ---------------------
 
 export interface Fn<T, R> {
