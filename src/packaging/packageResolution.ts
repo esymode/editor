@@ -1,5 +1,5 @@
 import { DepsLock, SemVerRange, ExplicitDeps, Version } from "../workspace";
-import * as maxSatisfying from "semver/ranges/max-satisfying";
+import maxSatisfying from "semver/ranges/max-satisfying";
 import { Err, Ok, allResult } from "../functionalNonsense";
 
 export type PackageJSON = {

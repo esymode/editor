@@ -6,6 +6,7 @@
     "jsx": "react",
     // "jsxFactory": "h",
     "removeComments": false,
+    "allowSyntheticDefaultImports": true,
     "sourceMap": true,
     "lib": ["webworker", "dom", "es2019.object"],
     "moduleResolution": "node",
