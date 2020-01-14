@@ -104,50 +104,54 @@ export const IDE: React.FC = () => {
         layoutFromParentStyle={editorContent}
       />
       <div className={previewStyle}>
-        {bundlingData ? (
-          <button
-            onClick={async () => {
-              const [lock, packageJsons] = bundlingData;
+        <div className={runButtonStyle}>
+          {bundlingData ? (
+            <button
+              onClick={async () => {
+                const [lock, packageJsons] = bundlingData;
 
-              // TODO: Handle nested files
-              const files = unsafeGetItem(
-                projectModel.folders,
-                projectModel.rootId
-              )
-                .children.filter(isFile)
-                .map(fileId => {
-                  const name = unsafeGetItem(projectModel.files, fileId).name;
-                  const content = unsafeGetItem(projectModel.sources, fileId);
-                  return {
-                    // TODO: Add TS transpilation.
-                    name: name.substring(0, name.length - 2) + "js",
-                    content
-                  };
-                });
+                // TODO: Handle nested files
+                const files = unsafeGetItem(
+                  projectModel.folders,
+                  projectModel.rootId
+                )
+                  .children.filter(isFile)
+                  .map(fileId => {
+                    const name = unsafeGetItem(projectModel.files, fileId).name;
+                    const content = unsafeGetItem(projectModel.sources, fileId);
+                    return {
+                      // TODO: Add TS transpilation.
+                      name: name.substring(0, name.length - 2) + "js",
+                      content
+                    };
+                  });
 
-              const output = await bundle(
-                files,
-                "index.js",
-                lock,
-                packageJsons,
-                explicitDeps
-              );
-
-              if (output.tag === "Ok") {
-                setPreviewSource(output.val);
-              } else {
-                setPreviewSource(
-                  `document.body.innerText = "Bundle error: " + ${output.err}`
+                const output = await bundle(
+                  files,
+                  "index.js",
+                  lock,
+                  packageJsons,
+                  explicitDeps
                 );
-              }
-            }}
-          >
-            Run
-          </button>
-        ) : (
-          <button disabled>Run</button>
-        )}
-        <Preview source={previewSource} className={previewStyle}></Preview>
+
+                if (output.tag === "Ok") {
+                  setPreviewSource(output.val);
+                } else {
+                  setPreviewSource(
+                    `document.body.innerText = "Bundle error: " + ${output.err}`
+                  );
+                }
+              }}
+            >
+              Run
+            </button>
+          ) : (
+            <button disabled>Run</button>
+          )}
+        </div>
+        <div className={previewContentStyle}>
+          <Preview source={previewSource} className={previewStyle}></Preview>
+        </div>
       </div>
       <div className={leftPanelStyle}>
         <FilesPanel projectFiles={projectModel} dispatch={dispatch} />
@@ -190,6 +194,16 @@ const previewStyle = css`
   grid-column: preview;
   grid-row: content;
   background-color: #444;
+  display: grid;
+  grid-template-rows: [run] 30px [content] auto;
+`;
+
+const runButtonStyle = css`
+  grid-row: run;
+`;
+
+const previewContentStyle = css`
+  grid-row: content;
 `;
 
 const headerStyle = css`

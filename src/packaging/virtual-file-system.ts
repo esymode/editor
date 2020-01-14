@@ -187,16 +187,10 @@ const resolveVirtualPathGuesses = async (
 
   // relative/local import
   if (relative) {
-    const req = joinFile(unsafeUnwrap(dirnameFile(importer)), id);
-    if (req.tag !== "Ok") {
-      return chainErrors(
-        req,
-        `Could not construct import path when importing ${id} from ${
-          importer !== undefined ? serializeFile(importer) : "undefined"
-        }`
-      );
-    }
-    return resolutionPathGuesses(req.val, packageJsons);
+    const importedPath = joinFile(unsafeUnwrap(dirnameFile(importer)), id);
+    return bind(importedPath, path =>
+      resolutionPathGuesses(path, packageJsons)
+    );
   }
 
   // non local import
