@@ -19,7 +19,6 @@ import { PackageJSON } from "./packaging/packageResolution";
 import { fetchFileFromUnpkg, bundle } from "./packaging/bundling";
 import { unsafeUnwrap, map, Result, allResult } from "./functionalNonsense";
 import { normalizePath } from "./normalizedPath";
-import { ProjectPicker } from "./ProjectPicker";
 // import { PackageJSON } from "./virtual-path-types";
 
 const init = () => {
@@ -35,7 +34,7 @@ const init = () => {
 
 const initial = init();
 
-export const IDE: React.FC = () => {
+export const IDE: React.FC<{ projId: string }> = () => {
   const [projectModel, dispatch] = useReducer(updateProjectModel, initial);
 
   const [bundlingData, setBundlingData] = useState<
@@ -98,9 +97,7 @@ export const IDE: React.FC = () => {
 
   return (
     <div className={containerLayout}>
-      <div className={headerStyle}>
-        <ProjectPicker />
-      </div>
+      <div className={headerStyle}></div>
       <EditorAndTabs
         dispatch={dispatch}
         project={projectModel}
