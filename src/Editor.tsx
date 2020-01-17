@@ -7,7 +7,6 @@ import { FilesPanel } from "./sidePanel/FilesPanel";
 import { Evt, createProjectFiles, updateProjectModel } from "./projectModel";
 import { Preview } from "./preview";
 import { EditorAndTabs } from "./editor_space/EditorAndTabs";
-import { ProjectPicker } from "./ProjectPicker";
 // import { PackageJSON } from "./virtual-path-types";
 
 const init = () => {
@@ -23,16 +22,14 @@ const init = () => {
 
 const initial = init();
 
-export const IDE: React.FC = () => {
+export const IDE: React.FC<{ projId: string }> = () => {
   const [projectModel, dispatch] = useReducer(updateProjectModel, initial);
 
   // console.log("IDE render model=", projectModel);
 
   return (
     <div className={containerLayout}>
-      <div className={headerStyle}>
-        <ProjectPicker />
-      </div>
+      <div className={headerStyle}></div>
       <EditorAndTabs
         dispatch={dispatch}
         project={projectModel}

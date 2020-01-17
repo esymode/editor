@@ -1,6 +1,6 @@
 import * as ReactDOM from "react-dom";
 import * as React from "react";
-import { IDE } from "./Editor";
+import { App } from "./App";
 // import { doPackageResolution } from "./packaging/doResolution";
 
 // doPackageResolution({ react: "^16.9.0", "react-dom": "^16.9.0" }).then(res => {
@@ -14,5 +14,4 @@ import { IDE } from "./Editor";
 //   //   }
 // });
 
-console.log({ IDE });
-ReactDOM.render(<IDE />, document.getElementById("root")!);
+ReactDOM.render(<App />, document.getElementById("root")!);

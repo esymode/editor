@@ -2,31 +2,14 @@ import * as React from "react";
 
 import { css } from "emotion";
 
-import { createProtocolClient, implementProtocol } from "shared/rpc/rpc_http";
-import { clientServerAPI, ProjectDesc } from "shared/client_server_api";
+import { ProjectDesc } from "shared/client_server_api";
 import { Union, of } from "ts-union";
 import { Thunk, useThunk } from "./shared/useThunk";
-import { useReducer, useEffect } from "react";
+import { useReducer, useEffect, useContext } from "react";
 import { Horizontal } from "./styles";
-
-const projects: ProjectDesc[] = [];
-
-const serverImpl = implementProtocol(clientServerAPI, {
-  createProject: name => {
-    const project = { id: "id", name };
-    projects.push(project);
-    return project;
-  },
-
-  listProjects: () => projects
-});
-
-const _client = createProtocolClient(clientServerAPI, msg => {
-  const res = serverImpl(msg);
-  return res instanceof Promise ? res : Promise.resolve(res);
-});
-
-type APIClient = typeof _client;
+import { APIClient, ApiContext } from "./ApiContext";
+import { Link } from "./NavigationPrimitives";
+import { projectEditingRoute } from "./routes";
 
 const State = Union({
   Loading: of(null),
@@ -44,18 +27,10 @@ type Ev = typeof Ev.T;
 
 const update = (prev: State, ev: Ev): State =>
   State.match(prev, {
-    Loading: () =>
-      Ev.match(ev, {
-        LoadProjects: projects => State.Loaded(projects),
-        default: () => prev
-      }),
-
+    Loading: () => Ev.if.LoadProjects(ev, projects => State.Loaded(projects)),
     Loaded: projects =>
-      Ev.match(ev, {
-        AddProject: project => State.Loaded(projects.concat(project)),
-        default: () => prev
-      })
-  });
+      Ev.if.AddProject(ev, proj => State.Loaded(projects.concat(proj)))
+  }) ?? prev;
 
 const createProject = (
   client: APIClient,
@@ -67,11 +42,14 @@ const fetchProjects = (client: APIClient): Thunk<State, Ev> => async send =>
   send(Ev.LoadProjects(await client.listProjects()));
 
 export const ProjectPicker: React.FC = () => {
+  const apiClient = useContext(ApiContext);
   const [state, send] = useThunk(useReducer(update, State.Loading));
 
   useEffect(() => {
-    send(fetchProjects(_client));
+    send(fetchProjects(apiClient));
   }, []);
+
+  // console.log("###", state);
 
   return (
     <Horizontal className={style}>
@@ -83,15 +61,19 @@ export const ProjectPicker: React.FC = () => {
               onClick={() => {
                 const projectName = prompt("Project name?");
                 if (projectName) {
-                  send(createProject(_client, projectName));
+                  send(createProject(apiClient, projectName));
                 }
               }}
             >
               Add project
             </button>
             <ul>
-              {projects.map(p => (
-                <li id={p.id}>{p.name}</li>
+              {projects.map(({ id, name }) => (
+                <li key={id}>
+                  <Link to={projectEditingRoute} params={{ id }}>
+                    {name}
+                  </Link>
+                </li>
               ))}
             </ul>
           </div>

@@ -1,6 +1,16 @@
 import { of, Union } from "ts-union";
 import { Map as Dict } from "immutable";
 
+export type ProjectModel = {
+  nextId: number;
+  selectedItem: FileId | FolderId | null;
+  rootId: FolderId;
+  files: Dict<FileId, FileItem>;
+  folders: Dict<FolderId, FolderItem>;
+  sources: Dict<FileId, string>;
+  openedFiles: OpenedFiles;
+};
+
 export const Evt = Union({
   SelectItem: of<FileId | FolderId>(),
   AddFile: of<string>(),
@@ -92,16 +102,6 @@ const closeFileInEditor = (
 
   activeTab = activeTab === fileId ? tabs[0] : activeTab;
   return [{ tag: "filled", unsaved, tabs, activeTab }, activeTab];
-};
-
-export type ProjectModel = {
-  nextId: number;
-  selectedItem: FileId | FolderId | null;
-  rootId: FolderId;
-  files: Dict<FileId, FileItem>;
-  folders: Dict<FolderId, FolderItem>;
-  sources: Dict<FileId, string>;
-  openedFiles: OpenedFiles;
 };
 
 export const createProjectFiles = (): ProjectModel => {
