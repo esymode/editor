@@ -44,6 +44,8 @@ export default {
           "PropTypes",
           "useState",
           "useEffect",
+          "useLayoutEffect",
+          "useContext",
           "useRef",
           "useMemo",
           "useReducer",
