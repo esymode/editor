@@ -1,5 +1,6 @@
 import { of, Union } from "ts-union";
 import { Map as Dict } from "immutable";
+import { ProjectData } from "shared/client_server_api";
 
 export type ProjectModel = {
   nextId: number;
@@ -104,8 +105,8 @@ const closeFileInEditor = (
   return [{ tag: "filled", unsaved, tabs, activeTab }, activeTab];
 };
 
-export const createProjectFiles = (): ProjectModel => {
-  const rootId = genFolderId(1);
+export const createEmptyModel = (): ProjectModel => {
+  const rootId = toFolderId(1);
   return {
     nextId: 2,
     rootId,
@@ -119,6 +120,17 @@ export const createProjectFiles = (): ProjectModel => {
     sources: Dict(),
     openedFiles: { tag: "empty" }
   };
+};
+
+export const createModelWithIndexTS = () => {
+  let p = updateProjectModel(createEmptyModel(), Evt.AddFile("index.ts"));
+
+  const fileId = p.files.findKey(fi => fi.name === "index.ts")!;
+
+  return updateProjectModel(
+    p,
+    Evt.SaveContent(fileId, 'console.log("Hello world!")')
+  );
 };
 
 export const unsafeGetItem = <K, T>(map: Dict<K, T>, key: K): T => {
@@ -287,7 +299,7 @@ export const updateProjectModel = (
         sources,
         selectedItem
       } = prev;
-      const id = genFileId(nextId);
+      const id = toFileId(nextId);
       const toFolderId = selectedItem
         ? isFile(selectedItem)
           ? findParentFolder(folders, rootId, selectedItem) || rootId
@@ -310,19 +322,19 @@ export const updateProjectModel = (
     },
     AddFolder: (folderName): ProjectModel => {
       const { nextId, folders, selectedItem, rootId } = prev;
-      const id = genFolderId(nextId);
-      const toFolderId = selectedItem
+      const id = toFolderId(nextId);
+      const parent = selectedItem
         ? isFile(selectedItem)
           ? findParentFolder(folders, rootId, selectedItem) || rootId
           : selectedItem
         : rootId;
-      const { name, children } = unsafeGetItem(folders, toFolderId);
+      const { name, children } = unsafeGetItem(folders, parent);
       return {
         ...prev,
         nextId: nextId + 1,
         selectedItem: id,
         folders: folders
-          .set(toFolderId, {
+          .set(parent, {
             name,
             isExpanded: true,
             children: children.concat(id)
@@ -464,7 +476,51 @@ export interface FolderId {
 // const genBigPositiveNumber = () => Math.round(Math.random() * 2 ** 31);
 
 export const unwrapItemId = (id: FileId | FolderId): number => id as any;
-const genFileId = (version: number): FileId => version as any;
-const genFolderId = (version: number): FolderId => (-1 * version) as any;
+const toFileId = (id: number): FileId => (id > 0 ? id : -id) as any;
+const toFolderId = (id: number): FolderId => (id > 0 ? -id : id) as any;
 export const isFile = (id: FileId | FolderId): id is FileId =>
   ((id as unknown) as number) > 0;
+
+const serializeDict = <K, V, KR, VR>(
+  dict: Dict<K, V>,
+  mapKey: (k: K) => KR,
+  mapVal: (v: V) => VR
+): [KR, VR][] => dict.toArray().map(([k, v]) => [mapKey(k), mapVal(v)]);
+
+export const toPersistantForm = (model: ProjectModel): ProjectData => {
+  const { nextId, files, folders, rootId, sources } = model;
+
+  return {
+    nextId,
+    rootId: unwrapItemId(rootId),
+    sources: serializeDict(sources, unwrapItemId, s => s),
+    files: serializeDict(files, unwrapItemId, ({ name }) => ({ name })),
+    folders: serializeDict(folders, unwrapItemId, ({ name, children }) => ({
+      name,
+      children: children.map(unwrapItemId)
+    }))
+  };
+};
+
+export const fromPersistantForm = (data: ProjectData): ProjectModel => {
+  const { nextId, files, folders, rootId, sources } = data;
+
+  return {
+    nextId,
+    rootId: toFolderId(rootId),
+    sources: Dict(sources.map(([id, source]) => [toFileId(id), source])),
+    files: Dict(files.map(([id, { name }]) => [toFileId(id), { name }])),
+    folders: Dict(
+      folders.map(([id, { name, children }]) => [
+        toFolderId(id),
+        {
+          name,
+          isExpanded: false,
+          children: children.map(child => child as any)
+        }
+      ])
+    ),
+    openedFiles: { tag: "empty" },
+    selectedItem: null
+  };
+};

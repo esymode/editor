@@ -1,41 +1,65 @@
 import * as React from "react";
-import { useEffect, useState, useReducer } from "react";
+import { useContext, useEffect, useState, useReducer } from "react";
 
 import { css } from "emotion";
 
-import { FilesPanel } from "./sidePanel/FilesPanel";
-import {
-  Evt,
-  createProjectFiles,
-  updateProjectModel,
-  isFile,
-  unsafeGetItem
-} from "./projectModel";
-import { Preview } from "./preview";
-import { EditorAndTabs } from "./editor_space/EditorAndTabs";
+import { isFile, unsafeGetItem } from "./projectModel";
 import { doPackageResolution } from "./packaging/doResolution";
 import { DepsLock } from "./workspace";
 import { PackageJSON } from "./packaging/packageResolution";
 import { fetchFileFromUnpkg, bundle } from "./packaging/bundling";
 import { unsafeUnwrap, map, Result, allResult } from "./functionalNonsense";
 import { normalizePath } from "./normalizedPath";
-// import { PackageJSON } from "./virtual-path-types";
+import { FilesPanel } from "./sidePanel/FilesPanel";
+import {
+  updateProjectModel,
+  ProjectModel,
+  fromPersistantForm,
+  toPersistantForm
+} from "./projectModel";
+import { Preview } from "./preview";
+import { EditorAndTabs } from "./editor_space/EditorAndTabs";
+import { ApiContext } from "./ApiContext";
+import { IconBtn } from "./styles";
+import { FaSave } from "react-icons/fa";
+import { projectPickerRoute } from "./routes";
+import { Redirect } from "./NavigationPrimitives";
 
-const init = () => {
-  let p = updateProjectModel(createProjectFiles(), Evt.AddFile("index.ts"));
+export const IDE: React.FC<{ projId: string }> = ({ projId }) => {
+  const apiClient = useContext(ApiContext);
 
-  const fileId = p.files.findKey(fi => fi.name === "index.ts")!;
-
-  return updateProjectModel(
-    p,
-    Evt.SaveContent(fileId, 'console.log("Hello world!")')
+  const [model, setModel] = useState<ProjectModel | "loading" | "failed">(
+    "loading"
   );
+
+  useEffect(() => {
+    apiClient
+      .loadProject(projId)
+      .then(p => setModel(p ? fromPersistantForm(p) : "failed"));
+  }, [projId]);
+
+  switch (model) {
+    case "loading":
+      return <div>Loading project...</div>;
+
+    case "failed":
+      return <Redirect to={projectPickerRoute} params={{}} />;
+
+    default:
+      return (
+        <ProjectWorkspace
+          save={m => apiClient.saveProject([projId, toPersistantForm(m)])}
+          proj={model}
+        />
+      );
+  }
 };
 
-const initial = init();
-
-export const IDE: React.FC<{ projId: string }> = () => {
-  const [projectModel, dispatch] = useReducer(updateProjectModel, initial);
+const ProjectWorkspace: React.FC<{
+  proj: ProjectModel;
+  save: (model: ProjectModel) => void;
+}> = ({ save, proj }) => {
+  const [projectModel, dispatch] = useReducer(updateProjectModel, proj);
 
   const [bundlingData, setBundlingData] = useState<
     [DepsLock, Map<string, PackageJSON>] | undefined
@@ -97,7 +121,13 @@ export const IDE: React.FC<{ projId: string }> = () => {
 
   return (
     <div className={containerLayout}>
-      <div className={headerStyle}></div>
+      <div className={headerStyle}>
+        <IconBtn
+          text="Save"
+          onClick={() => save(projectModel)}
+          Icon={FaSave}
+        ></IconBtn>
+      </div>
       <EditorAndTabs
         dispatch={dispatch}
         project={projectModel}
