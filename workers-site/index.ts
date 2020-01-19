@@ -4,7 +4,7 @@ import {
   Options
 } from "@cloudflare/kv-asset-handler";
 
-import { syncProtocol } from "./api_handler";
+// import { syncProtocol } from "./api_handler";
 // import {Req} from '@cloudflare/workers-types'
 
 /**
@@ -89,4 +89,4 @@ async function handleEvent(event: FetchEvent) {
 //     return new Request(url.toString(), defaultAssetKey);
 //   };
 // }
-console.log(syncProtocol);
+// console.log(syncProtocol);

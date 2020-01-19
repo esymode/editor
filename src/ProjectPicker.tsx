@@ -10,6 +10,7 @@ import { Horizontal } from "./styles";
 import { APIClient, ApiContext } from "./ApiContext";
 import { Link } from "./NavigationPrimitives";
 import { projectEditingRoute } from "./routes";
+import { toPersistantForm, createModelWithIndexTS } from "./projectModel";
 
 const State = Union({
   Loading: of(null),
@@ -20,7 +21,8 @@ type State = typeof State.T;
 
 const Ev = Union({
   LoadProjects: of<ProjectDesc[]>(),
-  AddProject: of<ProjectDesc>()
+  AddProject: of<ProjectDesc>(),
+  DeleteAll: of(null)
 });
 
 type Ev = typeof Ev.T;
@@ -29,14 +31,32 @@ const update = (prev: State, ev: Ev): State =>
   State.match(prev, {
     Loading: () => Ev.if.LoadProjects(ev, projects => State.Loaded(projects)),
     Loaded: projects =>
-      Ev.if.AddProject(ev, proj => State.Loaded(projects.concat(proj)))
+      Ev.match(ev, {
+        LoadProjects: () => undefined,
+        AddProject: proj => State.Loaded(projects.concat(proj)),
+        DeleteAll: () => State.Loaded([])
+      })
   }) ?? prev;
 
 const createProject = (
   client: APIClient,
   name: string
 ): Thunk<State, Ev> => async send =>
-  send(Ev.AddProject(await client.createProject(name)));
+  send(
+    Ev.AddProject(
+      await client.createProject([
+        name,
+        toPersistantForm(createModelWithIndexTS())
+      ])
+    )
+  );
+
+const deleteAllProjects = (
+  client: APIClient
+): Thunk<State, Ev> => async send => {
+  await client.clearProjects();
+  send(Ev.DeleteAll);
+};
 
 const fetchProjects = (client: APIClient): Thunk<State, Ev> => async send =>
   send(Ev.LoadProjects(await client.listProjects()));
@@ -66,6 +86,9 @@ export const ProjectPicker: React.FC = () => {
               }}
             >
               Add project
+            </button>
+            <button onClick={() => send(deleteAllProjects(apiClient))}>
+              Delete All
             </button>
             <ul>
               {projects.map(({ id, name }) => (
