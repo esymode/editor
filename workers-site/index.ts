@@ -89,4 +89,3 @@ async function handleEvent(event: FetchEvent) {
 //     return new Request(url.toString(), defaultAssetKey);
 //   };
 // }
-// console.log(syncProtocol);
