@@ -3,6 +3,7 @@ import { Map as Dict } from "immutable";
 import { ProjectData } from "shared/client_server_api";
 
 export type ProjectModel = {
+  name: string;
   nextId: number;
   selectedItem: FileId | FolderId | null;
   rootId: FolderId;
@@ -105,9 +106,10 @@ const closeFileInEditor = (
   return [{ tag: "filled", unsaved, tabs, activeTab }, activeTab];
 };
 
-export const createEmptyModel = (): ProjectModel => {
+export const createEmptyModel = (name: string): ProjectModel => {
   const rootId = toFolderId(1);
   return {
+    name,
     nextId: 2,
     rootId,
     selectedItem: null,
@@ -122,8 +124,8 @@ export const createEmptyModel = (): ProjectModel => {
   };
 };
 
-export const createModelWithIndexTS = () => {
-  let p = updateProjectModel(createEmptyModel(), Evt.AddFile("index.ts"));
+export const createModelWithIndexTS = (name: string) => {
+  let p = updateProjectModel(createEmptyModel(name), Evt.AddFile("index.ts"));
 
   const fileId = p.files.findKey(fi => fi.name === "index.ts")!;
 
@@ -297,7 +299,8 @@ export const updateProjectModel = (
         rootId,
         openedFiles,
         sources,
-        selectedItem
+        selectedItem,
+        name: projName
       } = prev;
       const id = toFileId(nextId);
       const toFolderId = selectedItem
@@ -307,6 +310,7 @@ export const updateProjectModel = (
         : rootId;
       const { name, children } = unsafeGetItem(folders, toFolderId);
       return {
+        name: projName,
         rootId,
         sources: sources.set(id, ""),
         selectedItem: id,
@@ -488,9 +492,10 @@ const serializeDict = <K, V, KR, VR>(
 ): [KR, VR][] => dict.toArray().map(([k, v]) => [mapKey(k), mapVal(v)]);
 
 export const toPersistantForm = (model: ProjectModel): ProjectData => {
-  const { nextId, files, folders, rootId, sources } = model;
+  const { nextId, files, folders, rootId, sources, name } = model;
 
   return {
+    name,
     nextId,
     rootId: unwrapItemId(rootId),
     sources: serializeDict(sources, unwrapItemId, s => s),
@@ -503,9 +508,10 @@ export const toPersistantForm = (model: ProjectModel): ProjectData => {
 };
 
 export const fromPersistantForm = (data: ProjectData): ProjectModel => {
-  const { nextId, files, folders, rootId, sources } = data;
+  const { name, nextId, files, folders, rootId, sources } = data;
 
   return {
+    name,
     nextId,
     rootId: toFolderId(rootId),
     sources: Dict(sources.map(([id, source]) => [toFileId(id), source])),

@@ -3,6 +3,7 @@ import {
   //   mapRequestToAsset,
   Options
 } from "@cloudflare/kv-asset-handler";
+import { serverAPIwithKVImpl } from "./api_handler";
 
 // import { syncProtocol } from "./api_handler";
 // import {Req} from '@cloudflare/workers-types'
@@ -32,6 +33,15 @@ addEventListener("fetch", event => {
 });
 
 async function handleEvent(event: FetchEvent) {
+  if (event.request.url.includes("/api")) {
+    const init = {
+      headers: {
+        "content-type": "application/json;charset=UTF-8"
+      }
+    };
+    const res = await serverAPIwithKVImpl(await event.request.json());
+    return new Response(JSON.stringify(res), init);
+  }
   //   const url = new URL(event.request.url);
   let options: Partial<Options> = {};
 
@@ -68,6 +78,15 @@ async function handleEvent(event: FetchEvent) {
     return new Response(e.message || e.toString(), { status: 500 });
   }
 }
+
+// async function handleRequest(request) {
+//   const init = {
+//     headers: {
+//       "content-type": "application/json;charset=UTF-8"
+//     }
+//   };
+//   return new Response(JSON.stringify(someJSON), init);
+// }
 
 /**
  * Here's one example of how to modify a request to
