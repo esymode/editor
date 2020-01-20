@@ -44,10 +44,7 @@ const createProject = (
 ): Thunk<State, Ev> => async send =>
   send(
     Ev.AddProject(
-      await client.createProject([
-        name,
-        toPersistantForm(createModelWithIndexTS())
-      ])
+      await client.createProject(toPersistantForm(createModelWithIndexTS(name)))
     )
   );
 

@@ -45,11 +45,11 @@ const serverImpl = (() => {
   };
 
   return implementProtocol(clientServerAPI, {
-    createProject: async ([name, data]) => {
+    createProject: async data => {
       await wait(500);
       const project = {
         id: Math.round(Math.random() * 100000).toString(),
-        name
+        name: data.name
       };
       projects.set(project.id, data);
       descriptions.set(project.id, project);
@@ -66,7 +66,7 @@ const serverImpl = (() => {
 
     loadProject: async id => {
       await wait(500);
-      const t = projects.get(id);
+      const t = projects.get(id) || null;
       console.log("loadProject", id, t);
       return t;
     },
@@ -86,10 +86,36 @@ const serverImpl = (() => {
   });
 })();
 
-const _client = createProtocolClient(clientServerAPI, msg => {
+function postData(url: string, data: unknown) {
+  // console.log("!!!!", JSON.stringify(data));
+  // Default options are marked with *
+  const req = fetch(url, {
+    method: "POST", // *GET, POST, PUT, DELETE, etc.
+    mode: "cors", // no-cors, *cors, same-origin
+    // cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
+    headers: {
+      "Content-Type": "text/plain"
+      // 'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: JSON.stringify(data) // body data type must match "Content-Type" header
+  });
+
+  // console.log({ req });
+
+  return req.then(res => res.json());
+}
+
+const clientTolocalStorage = createProtocolClient(clientServerAPI, msg => {
+  console.log("serverReq", msg);
   const res = serverImpl(msg);
   return res instanceof Promise ? res : Promise.resolve(res);
 });
+
+const clientToRealServer = createProtocolClient(clientServerAPI, msg =>
+  postData("/api", msg)
+);
+
+const client = process.env.CI ? clientToRealServer : clientTolocalStorage;
 
 export class App extends React.Component<{}, {}> {
   private router: Router<JSX.Element>;
@@ -111,7 +137,7 @@ export class App extends React.Component<{}, {}> {
   render() {
     const matchedPage = this.router.match(window.location.hash);
     return (
-      <ApiContext.Provider value={_client}>
+      <ApiContext.Provider value={client}>
         {matchedPage ?? <Redirect to={projectPickerRoute} params={{}} />}
       </ApiContext.Provider>
     );

@@ -2,6 +2,9 @@ name = "editor"
 type = "webpack"
 account_id = "3b97454ba8bd49168157a3af48398b30"
 workers_dev = true
+kv-namespaces = [
+    {binding = "PROJECTS", id = "5d441b06b2e8497084ed78f71117414e"}
+]
 
 [site]
 bucket = "./dist"
