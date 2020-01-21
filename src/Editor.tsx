@@ -180,7 +180,7 @@ const ProjectWorkspace: React.FC<{
           )}
         </div>
         <div className={previewContentStyle}>
-          <Preview source={previewSource} className={previewStyle}></Preview>
+          <Preview source={previewSource} className={iframeStyle}></Preview>
         </div>
       </div>
       <div className={leftPanelStyle}>
@@ -223,9 +223,9 @@ const editorContent = css`
 const previewStyle = css`
   grid-column: preview;
   grid-row: content;
-  background-color: #444;
+  background-color: #ccc;
   display: grid;
-  grid-template-rows: [run] 30px [content] auto;
+  grid-template-rows: [run] 30px [content] 1fr;
 `;
 
 const runButtonStyle = css`
@@ -234,6 +234,11 @@ const runButtonStyle = css`
 
 const previewContentStyle = css`
   grid-row: content;
+`;
+
+const iframeStyle = css`
+  width: 100%;
+  height: 100%;
 `;
 
 const headerStyle = css`

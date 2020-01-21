@@ -219,9 +219,10 @@ const resolveVirtualPathGuesses = async (
   }
 
   // now that we have the semver range, we can finally look up the version
-  const version = lock[semverRange.val]
-    ? Ok(lock[semverRange.val])
-    : Err(`lock does not have an entry for ${semverRange.val}`);
+  const specifier = versionedPackage(name, semverRange.val);
+  const version = lock[specifier]
+    ? Ok(lock[specifier])
+    : Err(`lock does not have an entry for ${specifier}`);
 
   if (version.tag !== "Ok") {
     return version;
