@@ -43,12 +43,17 @@ export const EditorAndTabs: React.FC<{
           unsaved.get(activeTab) ??
           project.sources.get(openedFiles.activeTab, "");
 
+        const type = project.files.get(activeTab)?.name.endsWith(".json")
+          ? "json"
+          : "typescript";
+
         return (
           <Monaco
             fileId={openedFiles.activeTab}
             content={content}
             dispatch={dispatch}
             className={monacoStyle}
+            type={type}
           />
         );
       }, [

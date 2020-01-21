@@ -148,7 +148,8 @@ export const Monaco: React.FC<{
   content: string;
   dispatch: Dispatch;
   className: string;
-}> = ({ content, fileId, dispatch, className }) => {
+  type: "typescript" | "json";
+}> = ({ content, fileId, dispatch, className, type }) => {
   // console.log(">> render ", { content });
 
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
@@ -170,7 +171,7 @@ export const Monaco: React.FC<{
   // now we create model for the editing itself
   useEffect(() => {
     // console.log(">> model created", { content });
-    const m = monaco.editor.createModel(content, "typescript");
+    const m = monaco.editor.createModel(content, type);
     setModel(m);
     return () => {
       dispatch(Evt.PersistUnsavedChanges(fileId, m.getValue()));

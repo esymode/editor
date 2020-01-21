@@ -3,9 +3,9 @@ import { useContext, useEffect, useState, useReducer } from "react";
 
 import { css } from "emotion";
 
-import { isFile, unsafeGetItem } from "./projectModel";
+import { isFile, unsafeGetItem, FileId, FolderId } from "./projectModel";
 import { doPackageResolution } from "./packaging/doResolution";
-import { DepsLock } from "./workspace";
+import { DepsLock, ExplicitDeps } from "./workspace";
 import { PackageJSON } from "./packaging/packageResolution";
 import { fetchFileFromUnpkg, bundle } from "./packaging/bundling";
 import { unsafeUnwrap, map, Result, allResult } from "./functionalNonsense";
@@ -62,21 +62,45 @@ const ProjectWorkspace: React.FC<{
   const [projectModel, dispatch] = useReducer(updateProjectModel, proj);
 
   const [bundlingData, setBundlingData] = useState<
-    [DepsLock, Map<string, PackageJSON>] | undefined
+    [DepsLock, Map<string, PackageJSON>, ExplicitDeps] | undefined
   >(undefined);
 
   const [previewSource, setPreviewSource] = useState("");
 
-  const explicitDeps = {
-    react: "^16.9.0",
-    "react-dom": "^16.9.0"
-  };
+  const packageJsonId: FileId | FolderId | undefined = unsafeGetItem(
+    projectModel.folders,
+    projectModel.rootId
+  ).children.filter(
+    fileId => unsafeGetItem(projectModel.files, fileId).name === "package.json"
+  )[0];
+
+  const packageJsonContents = isFile(packageJsonId)
+    ? unsafeGetItem(projectModel.sources, packageJsonId)
+    : undefined;
 
   useEffect(() => {
+    setBundlingData(undefined);
+    const deps: ExplicitDeps | undefined = (() => {
+      try {
+        return (
+          packageJsonContents && JSON.parse(packageJsonContents).dependencies
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+
+    if (!deps) {
+      console.error("deps failed");
+      return;
+    }
+
+    console.warn("deps processing");
+
     let abort = false;
-    doPackageResolution(explicitDeps).then(async lock => {
+    doPackageResolution(deps).then(async lock => {
       if (lock.tag !== "Ok") {
-        console.warn("Failed to generate lock; aborting");
+        console.warn(`Failed to generate lock; aborting: ${lock.err}`);
         return;
       }
 
@@ -112,12 +136,12 @@ const ProjectWorkspace: React.FC<{
         return;
       }
 
-      setBundlingData([lock.val, packageJsons.val]);
+      setBundlingData([lock.val, packageJsons.val, deps]);
     });
     return () => {
       abort = true;
     };
-  }, []);
+  }, [packageJsonContents]);
 
   return (
     <div className={containerLayout}>
@@ -138,7 +162,7 @@ const ProjectWorkspace: React.FC<{
           {bundlingData ? (
             <button
               onClick={async () => {
-                const [lock, packageJsons] = bundlingData;
+                const [lock, packageJsons, explicitDeps] = bundlingData;
 
                 // TODO: Handle nested files
                 const files = unsafeGetItem(
