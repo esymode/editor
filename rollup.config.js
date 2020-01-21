@@ -13,9 +13,12 @@ import css from "rollup-plugin-css-only";
 const production = !process.env.ROLLUP_WATCH;
 // process.env.NODE_ENV = "development";
 
-export default {
+export default [
+  { entry: ["main", "src/main.tsx"], format: "esm" },
+  { entry: ["ts_worker", "worker/tsWorker.ts"], format: "iife" }
+].map(({ entry: [name, path], format }) => ({
   input: {
-    main: "src/main.tsx"
+    [name]: path
     // "editor.worker":
     //   "node_modules/monaco-editor/esm/vs/editor/editor.worker.js",
     // "json.worker":
@@ -27,7 +30,7 @@ export default {
   },
   output: {
     dir: "dist",
-    format: "esm",
+    format,
     sourcemap: true
   },
   plugins: [
@@ -62,4 +65,4 @@ export default {
     // linaria({ sourceMap: process.env.NODE_ENV !== "production" }),
     css({ output: "dist/styles.css" })
   ]
-};
+}));
