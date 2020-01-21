@@ -13,6 +13,9 @@ import { ApiContext } from "./ApiContext";
 import { projectPickerRoute, projectEditingRoute } from "./routes";
 import { IDE } from "./Editor";
 import { Redirect } from "./NavigationPrimitives";
+import { workerRpcClient } from "shared/rpc/rpc_webworker";
+import { TS_API_PORT, tsAPI } from "shared/typescript_worker_api";
+import { TsWorkerContext } from "./TsWorkerContext";
 
 const wait = (ms: number) => new Promise(res => setTimeout(() => res(), ms));
 
@@ -117,6 +120,12 @@ const clientToRealServer = createProtocolClient(clientServerAPI, msg =>
 
 const client = process.env.CI ? clientToRealServer : clientTolocalStorage;
 
+const workerClient = workerRpcClient(
+  tsAPI,
+  new Worker("./ts_worker.js"),
+  TS_API_PORT
+);
+
 export class App extends React.Component<{}, {}> {
   private router: Router<JSX.Element>;
 
@@ -138,7 +147,9 @@ export class App extends React.Component<{}, {}> {
     const matchedPage = this.router.match(window.location.hash);
     return (
       <ApiContext.Provider value={client}>
-        {matchedPage ?? <Redirect to={projectPickerRoute} params={{}} />}
+        <TsWorkerContext.Provider value={workerClient}>
+          {matchedPage ?? <Redirect to={projectPickerRoute} params={{}} />}
+        </TsWorkerContext.Provider>
       </ApiContext.Provider>
     );
   }

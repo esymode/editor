@@ -19,6 +19,7 @@ import { FaSave } from "react-icons/fa";
 import { projectPickerRoute } from "./routes";
 import { Redirect } from "./NavigationPrimitives";
 import { bundle } from "./packaging/bundling";
+import { TsWorkerContext } from "./TsWorkerContext";
 
 export const IDE: React.FC<{ projId: string }> = ({ projId }) => {
   const apiClient = useContext(ApiContext);
@@ -56,6 +57,84 @@ const ProjectWorkspace: React.FC<{
 }> = ({ save, proj }) => {
   const [projectModel, dispatch] = useReducer(updateProjectModel, proj);
   const [previewSource, setPreviewSource] = useState("");
+
+  const packageJsonId: FileId | FolderId | undefined = unsafeGetItem(
+    projectModel.folders,
+    projectModel.rootId
+  ).children.filter(
+    fileId => unsafeGetItem(projectModel.files, fileId).name === "package.json"
+  )[0];
+
+  const packageJsonContents = isFile(packageJsonId)
+    ? unsafeGetItem(projectModel.sources, packageJsonId)
+    : undefined;
+
+  useEffect(() => {
+    setBundlingData(undefined);
+    const deps: ExplicitDeps | undefined = (() => {
+      try {
+        return (
+          packageJsonContents && JSON.parse(packageJsonContents).dependencies
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+
+    if (!deps) {
+      console.error("deps failed");
+      return;
+    }
+
+    console.warn("deps processing");
+
+    let abort = false;
+    doPackageResolution(deps).then(async lock => {
+      if (lock.tag !== "Ok") {
+        console.warn(`Failed to generate lock; aborting: ${lock.err}`);
+        return;
+      }
+
+      const packageJsons: Result<
+        Map<string, PackageJSON>,
+        string
+      > = await Promise.all(
+        Object.entries(lock.val).map(
+          async ([specifier, version]): Promise<
+            Result<[string, PackageJSON], string>
+          > => {
+            const name = specifier.substring(0, specifier.indexOf("@"));
+            return await fetchFileFromUnpkg({
+              type: "node_module",
+              name,
+              version,
+              path: unsafeUnwrap(normalizePath("package.json"))
+            }).then(result =>
+              map(result, s => [`${name}@${version}`, JSON.parse(s)])
+            );
+          }
+        )
+      )
+        .then(allResult)
+        .then(pairs => map(pairs, ps => new Map(ps)));
+
+      if (packageJsons.tag !== "Ok") {
+        console.warn("Failed to fetch packageJsons; aborting");
+        return;
+      }
+
+      if (abort) {
+        return;
+      }
+
+      setBundlingData([lock.val, packageJsons.val, deps]);
+    });
+    return () => {
+      abort = true;
+    };
+  }, [packageJsonContents]);
+
+  const tsWorkerClient = useContext(TsWorkerContext);
 
   return (
     <div className={containerLayout}>

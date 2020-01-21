@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "lib": ["esnext", "webworker"]
+  },
+  "exclude": ["node_modules", "__tests__", "**/__tests__", "src/__tests__"],
+  "include": ["./**/*.ts"]
+}
