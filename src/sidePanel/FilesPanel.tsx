@@ -50,10 +50,10 @@ const panelStyle = css`
 // `;
 
 export const FilesPanel: React.FC<{
-  projectFiles: ProjectModel;
+  projectModel: ProjectModel;
   dispatch: Dispatch;
-}> = ({ projectFiles, dispatch }) => {
-  const { rootId, folders } = projectFiles;
+}> = ({ projectModel, dispatch }) => {
+  const { rootId, folders } = projectModel;
   const { children } = unsafeGetItem(folders, rootId);
   return (
     <div className={panelStyle}>
@@ -80,7 +80,7 @@ export const FilesPanel: React.FC<{
         />
       </Horizontal>
 
-      {renderChildren(children, 0, projectFiles, dispatch)}
+      {renderChildren(children, 0, projectModel, dispatch)}
     </div>
   );
 };

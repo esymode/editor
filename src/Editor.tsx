@@ -184,7 +184,7 @@ const ProjectWorkspace: React.FC<{
         </div>
       </div>
       <div className={leftPanelStyle}>
-        <FilesPanel projectFiles={projectModel} dispatch={dispatch} />
+        <FilesPanel projectModel={projectModel} dispatch={dispatch} />
       </div>
     </div>
   );
