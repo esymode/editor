@@ -1,28 +1,34 @@
 import { of, Union } from "ts-union";
 import { Map as Dict } from "immutable";
 import { ProjectData } from "shared/client_server_api";
+import { ExplicitDeps, DepsLock } from "./workspace";
+import { PackageJSON } from "./packaging/packageResolution";
 
 export type ProjectModel = {
   name: string;
   nextId: number;
-  selectedItem: FileId | FolderId | null;
+  selectedItem: FileId | FolderId | "package.json" | null;
   rootId: FolderId;
   files: Dict<FileId, FileItem>;
   folders: Dict<FolderId, FolderItem>;
   sources: Dict<FileId, string>;
   openedFiles: OpenedFiles;
+  explicitDeps: ExplicitDeps;
+  depsLock: DepsLock;
+  savedPackageJsons: Map<string, PackageJSON>;
 };
 
 export const Evt = Union({
-  SelectItem: of<FileId | FolderId>(),
+  SelectItem: of<FileId | FolderId | "package.json">(),
   AddFile: of<string>(),
   AddFolder: of<string>(),
   SaveContent: of<FileId, string>(),
   DeleteFileOrFolder: of<FileId | FolderId>(),
-  SwitchToTab: of<FileId>(),
-  CloseTab: of<FileId>(),
+  SwitchToTab: of<FileId | "package.json">(),
+  CloseTab: of<FileId | "package.json">(),
   MarkFileDrity: of<FileId>(),
-  PersistUnsavedChanges: of<FileId, string>()
+  PersistUnsavedChanges: of<FileId, string>(),
+  UpdateDeps: of<ExplicitDeps, DepsLock, Map<string, PackageJSON>>()
 });
 
 export type Evt = typeof Evt.T;
@@ -45,8 +51,8 @@ export type FolderItem = {
 
 interface SomeOpenedFiles {
   tag: "filled";
-  activeTab: FileId;
-  tabs: FileId[];
+  activeTab: FileId | "package.json";
+  tabs: (FileId | "package.json")[];
   unsaved: Dict<FileId, string | null>;
 }
 
@@ -58,7 +64,7 @@ export type OpenedFiles = { tag: "empty" } | SomeOpenedFiles;
 
 const openFileInEditor = (
   prev: OpenedFiles,
-  fileId: FileId
+  fileId: FileId | "package.json"
 ): SomeOpenedFiles => {
   if (prev.tag === "empty") {
     return {
@@ -90,15 +96,15 @@ const openFileInEditor = (
 
 const closeFileInEditor = (
   prev: OpenedFiles,
-  fileId: FileId
-): [OpenedFiles, FileId | null] => {
+  fileId: FileId | "package.json"
+): [OpenedFiles, FileId | "package.json" | null] => {
   if (prev.tag === "empty") return [prev, null];
   let { tabs, activeTab, unsaved } = prev;
 
   if (tabs.findIndex(t => t === fileId) < 0) return [prev, prev.activeTab];
 
   tabs = tabs.filter(t => t !== fileId);
-  unsaved = unsaved.delete(fileId);
+  unsaved = fileId !== "package.json" ? unsaved.delete(fileId) : unsaved;
 
   if (tabs.length === 0) return [{ tag: "empty" }, null];
 
@@ -120,7 +126,10 @@ export const createEmptyModel = (name: string): ProjectModel => {
       isExpanded: true
     }),
     sources: Dict(),
-    openedFiles: { tag: "empty" }
+    openedFiles: { tag: "empty" },
+    explicitDeps: {},
+    depsLock: {},
+    savedPackageJsons: new Map()
   };
 };
 
@@ -261,15 +270,17 @@ export const updateProjectModel = (
       return {
         ...prev,
         selectedItem: id,
-        folders: isFile(id)
-          ? folders
-          : updateInDict(folders, id, f => ({
-              ...f,
-              isExpanded: !f.isExpanded
-            })),
-        openedFiles: isFile(id)
-          ? openFileInEditor(openedFiles, id)
-          : openedFiles
+        folders:
+          id === "package.json" || isFile(id)
+            ? folders
+            : updateInDict(folders, id, f => ({
+                ...f,
+                isExpanded: !f.isExpanded
+              })),
+        openedFiles:
+          id === "package.json" || isFile(id)
+            ? openFileInEditor(openedFiles, id)
+            : openedFiles
       };
     },
 
@@ -296,22 +307,23 @@ export const updateProjectModel = (
         nextId,
         files,
         folders,
-        rootId,
         openedFiles,
         sources,
         selectedItem,
+        rootId,
         name: projName
       } = prev;
       const id = toFileId(nextId);
-      const toFolderId = selectedItem
-        ? isFile(selectedItem)
+      const toFolderId =
+        !selectedItem || selectedItem === "package.json"
+          ? rootId
+          : isFile(selectedItem)
           ? findParentFolder(folders, rootId, selectedItem) || rootId
-          : selectedItem
-        : rootId;
+          : selectedItem;
       const { name, children } = unsafeGetItem(folders, toFolderId);
       return {
+        ...prev,
         name: projName,
-        rootId,
         sources: sources.set(id, ""),
         selectedItem: id,
         nextId: nextId + 1,
@@ -327,11 +339,13 @@ export const updateProjectModel = (
     AddFolder: (folderName): ProjectModel => {
       const { nextId, folders, selectedItem, rootId } = prev;
       const id = toFolderId(nextId);
-      const parent = selectedItem
-        ? isFile(selectedItem)
+      const parent =
+        !selectedItem || selectedItem === "package.json"
+          ? rootId
+          : isFile(selectedItem)
           ? findParentFolder(folders, rootId, selectedItem) || rootId
-          : selectedItem
-        : rootId;
+          : selectedItem;
+
       const { name, children } = unsafeGetItem(folders, parent);
       return {
         ...prev,
@@ -350,7 +364,7 @@ export const updateProjectModel = (
       // all of these references might be mutated, thus "let"
       let { files, folders, sources, selectedItem, openedFiles } = prev;
       const deleteCmds = collectAllFilesAndFoldersToDelete(id, prev);
-      let openedTab: FileId | null = null;
+      let openedTab: FileId | "package.json" | null = null;
       // console.log("$$", { id, prev });
       // mutation block
       for (const cmd of deleteCmds) {
@@ -408,7 +422,10 @@ export const updateProjectModel = (
       let { openedFiles, folders, rootId } = prev;
       openedFiles = openFileInEditor(openedFiles, fileId);
       // auto expand on switching a tab
-      const path = findFolderHierarchy(folders, rootId, fileId);
+      const path =
+        fileId === "package.json"
+          ? null
+          : findFolderHierarchy(folders, rootId, fileId);
 
       // console.log("##", { path, folders });
       if (path) {
@@ -458,6 +475,9 @@ export const updateProjectModel = (
           unsaved: unsaved.set(fileId, content)
         }
       };
+    },
+    UpdateDeps: (explicitDeps, depsLock, savedPackageJsons): ProjectModel => {
+      return { ...prev, explicitDeps, depsLock, savedPackageJsons };
     }
   });
 
@@ -492,7 +512,17 @@ const serializeDict = <K, V, KR, VR>(
 ): [KR, VR][] => dict.toArray().map(([k, v]) => [mapKey(k), mapVal(v)]);
 
 export const toPersistantForm = (model: ProjectModel): ProjectData => {
-  const { nextId, files, folders, rootId, sources, name } = model;
+  const {
+    nextId,
+    files,
+    folders,
+    rootId,
+    sources,
+    name,
+    explicitDeps,
+    depsLock,
+    savedPackageJsons
+  } = model;
 
   return {
     name,
@@ -503,12 +533,40 @@ export const toPersistantForm = (model: ProjectModel): ProjectData => {
     folders: serializeDict(folders, unwrapItemId, ({ name, children }) => ({
       name,
       children: children.map(unwrapItemId)
-    }))
+    })),
+    explicitDeps: Object.entries(explicitDeps),
+    depsLock: Object.entries(depsLock),
+    savedPackageJsons: Array.from(savedPackageJsons.entries()).map(
+      ([name, { dependencies, peerDependencies, main, module, es2015 }]) => [
+        name,
+        {
+          main: main ?? null,
+          module: module ?? null,
+          es2015: es2015 ?? null,
+          dependencies:
+            dependencies === undefined ? null : Object.entries(dependencies),
+          peerDependencies:
+            peerDependencies === undefined
+              ? null
+              : Object.entries(peerDependencies)
+        }
+      ]
+    )
   };
 };
 
 export const fromPersistantForm = (data: ProjectData): ProjectModel => {
-  const { name, nextId, files, folders, rootId, sources } = data;
+  const {
+    name,
+    nextId,
+    files,
+    folders,
+    rootId,
+    sources,
+    explicitDeps,
+    depsLock,
+    savedPackageJsons
+  } = data;
 
   return {
     name,
@@ -527,6 +585,28 @@ export const fromPersistantForm = (data: ProjectData): ProjectModel => {
       ])
     ),
     openedFiles: { tag: "empty" },
-    selectedItem: null
+    selectedItem: null,
+    explicitDeps: Object.fromEntries(explicitDeps),
+    depsLock: Object.fromEntries(depsLock),
+    savedPackageJsons: new Map(
+      savedPackageJsons.map(
+        ([name, { main, module, es2015, dependencies, peerDependencies }]) => [
+          name,
+          {
+            main: main ?? undefined,
+            module: module ?? undefined,
+            es2015: es2015 ?? undefined,
+            dependencies:
+              dependencies === null
+                ? undefined
+                : Object.fromEntries(dependencies),
+            peerDependencies:
+              peerDependencies === null
+                ? undefined
+                : Object.fromEntries(peerDependencies)
+          }
+        ]
+      )
+    )
   };
 };

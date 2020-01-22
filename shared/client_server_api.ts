@@ -25,13 +25,25 @@ export type FolderItem = Static<typeof FolderItem>;
 
 const ProjectId = Str;
 
+const PackageJsonData = Struct({
+  main: Nullable(Str),
+  module: Nullable(Str),
+  es2015: Nullable(Str),
+  dependencies: Nullable(Vec(Tuple(Str, Str))),
+  peerDependencies: Nullable(Vec(Tuple(Str, Str)))
+});
+export type PackageJsonData = Static<typeof PackageJsonData>;
+
 const ProjectData = Struct({
   name: Str,
   nextId: I32,
   rootId: I32,
   files: Vec(Tuple(I32, FileItem)),
   sources: Vec(Tuple(I32, Str)),
-  folders: Vec(Tuple(I32, FolderItem))
+  folders: Vec(Tuple(I32, FolderItem)),
+  explicitDeps: Vec(Tuple(Str, Str)),
+  depsLock: Vec(Tuple(Str, Str)),
+  savedPackageJsons: Vec(Tuple(Str, PackageJsonData))
 });
 
 export type ProjectData = Static<typeof ProjectData>;

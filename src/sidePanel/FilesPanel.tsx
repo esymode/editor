@@ -1,5 +1,4 @@
 import * as React from "react";
-import { useState } from "react";
 
 import { css } from "emotion";
 
@@ -81,6 +80,7 @@ export const FilesPanel: React.FC<{
       </Horizontal>
 
       {renderChildren(children, 0, projectModel, dispatch)}
+      <PackageJson projectFiles={projectModel} dispatch={dispatch} />
     </div>
   );
 };
@@ -217,6 +217,34 @@ const FileView: React.FC<{
         onClick={() => dispatch(Evt.DeleteFileOrFolder(fileId))}
       >
         <FaTrash size={12} />
+      </div>
+    </div>
+  );
+};
+
+const PackageJson: React.FC<{
+  projectFiles: ProjectModel;
+  dispatch: Dispatch;
+}> = ({ projectFiles, dispatch }) => {
+  const isSelected = projectFiles.selectedItem === "package.json";
+
+  return (
+    <div
+      className={itemRowStyle}
+      style={{
+        paddingLeft: getPaddingLeft(1, "file"),
+        outline: isSelected ? "green solid 1px" : undefined
+      }}
+    >
+      <div
+        className={itemStyle}
+        onClick={() => dispatch(Evt.SelectItem("package.json"))}
+      >
+        <div className={itemIconStyle}>
+          <FaFile />
+        </div>
+
+        <span role="button">package.json</span>
       </div>
     </div>
   );

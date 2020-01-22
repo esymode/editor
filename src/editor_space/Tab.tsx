@@ -8,10 +8,10 @@ import { Color, Horizontal } from "../styles";
 
 interface TabProps {
   dispatch: Dispatch;
-  fileId: FileId;
+  fileId: FileId | "package.json";
   text: string;
   isSelected: boolean;
-  isSaved: boolean;
+  isUnsaved: boolean;
 }
 
 export const Tab: React.FC<TabProps> = ({
@@ -19,14 +19,14 @@ export const Tab: React.FC<TabProps> = ({
   fileId,
   text,
   isSelected,
-  isSaved
+  isUnsaved
 }) => {
   //   const { isHovered, mouseEnter, mouseLeave } = useMouseHover();
 
   return (
     <Horizontal className={isSelected ? selectedBorderStyle : undefined}>
       <span onClick={() => dispatch(Evt.SwitchToTab(fileId))}>
-        {isSaved ? "* " : null}
+        {isUnsaved ? "* " : null}
         {text}
       </span>
       <div onClick={() => dispatch(Evt.CloseTab(fileId))}>

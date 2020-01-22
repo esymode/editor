@@ -60,64 +60,7 @@ const ProjectWorkspace: React.FC<{
   save: (model: ProjectModel) => void;
 }> = ({ save, proj }) => {
   const [projectModel, dispatch] = useReducer(updateProjectModel, proj);
-
-  const [bundlingData, setBundlingData] = useState<
-    [DepsLock, Map<string, PackageJSON>] | undefined
-  >(undefined);
-
   const [previewSource, setPreviewSource] = useState("");
-
-  const explicitDeps = {
-    react: "^16.9.0",
-    "react-dom": "^16.9.0"
-  };
-
-  useEffect(() => {
-    let abort = false;
-    doPackageResolution(explicitDeps).then(async lock => {
-      if (lock.tag !== "Ok") {
-        console.warn("Failed to generate lock; aborting");
-        return;
-      }
-
-      const packageJsons: Result<
-        Map<string, PackageJSON>,
-        string
-      > = await Promise.all(
-        Object.entries(lock.val).map(
-          async ([specifier, version]): Promise<
-            Result<[string, PackageJSON], string>
-          > => {
-            const name = specifier.substring(0, specifier.indexOf("@"));
-            return await fetchFileFromUnpkg({
-              type: "node_module",
-              name,
-              version,
-              path: unsafeUnwrap(normalizePath("package.json"))
-            }).then(result =>
-              map(result, s => [`${name}@${version}`, JSON.parse(s)])
-            );
-          }
-        )
-      )
-        .then(allResult)
-        .then(pairs => map(pairs, ps => new Map(ps)));
-
-      if (packageJsons.tag !== "Ok") {
-        console.warn("Failed to fetch packageJsons; aborting");
-        return;
-      }
-
-      if (abort) {
-        return;
-      }
-
-      setBundlingData([lock.val, packageJsons.val]);
-    });
-    return () => {
-      abort = true;
-    };
-  }, []);
 
   return (
     <div className={containerLayout}>
@@ -135,49 +78,45 @@ const ProjectWorkspace: React.FC<{
       />
       <div className={previewStyle}>
         <div className={runButtonStyle}>
-          {bundlingData ? (
-            <button
-              onClick={async () => {
-                const [lock, packageJsons] = bundlingData;
+          <button
+            onClick={async () => {
+              const { depsLock, savedPackageJsons } = projectModel;
 
-                // TODO: Handle nested files
-                const files = unsafeGetItem(
-                  projectModel.folders,
-                  projectModel.rootId
-                )
-                  .children.filter(isFile)
-                  .map(fileId => {
-                    const name = unsafeGetItem(projectModel.files, fileId).name;
-                    const content = unsafeGetItem(projectModel.sources, fileId);
-                    return {
-                      // TODO: Add TS transpilation.
-                      name: name.substring(0, name.length - 2) + "js",
-                      content
-                    };
-                  });
+              // TODO: Handle nested files
+              const files = unsafeGetItem(
+                projectModel.folders,
+                projectModel.rootId
+              )
+                .children.filter(isFile)
+                .map(fileId => {
+                  const name = unsafeGetItem(projectModel.files, fileId).name;
+                  const content = unsafeGetItem(projectModel.sources, fileId);
+                  return {
+                    // TODO: Add TS transpilation.
+                    name: name.substring(0, name.length - 2) + "js",
+                    content
+                  };
+                });
 
-                const output = await bundle(
-                  files,
-                  "index.js",
-                  lock,
-                  packageJsons,
-                  explicitDeps
+              const output = await bundle(
+                files,
+                "index.js",
+                depsLock,
+                savedPackageJsons,
+                projectModel.explicitDeps
+              );
+
+              if (output.tag === "Ok") {
+                setPreviewSource(output.val);
+              } else {
+                setPreviewSource(
+                  `document.body.innerText = "Bundle error: " + ${output.err}`
                 );
-
-                if (output.tag === "Ok") {
-                  setPreviewSource(output.val);
-                } else {
-                  setPreviewSource(
-                    `document.body.innerText = "Bundle error: " + ${output.err}`
-                  );
-                }
-              }}
-            >
-              Run
-            </button>
-          ) : (
-            <button disabled>Run</button>
-          )}
+              }
+            }}
+          >
+            Run
+          </button>
         </div>
         <div className={previewContentStyle}>
           <Preview source={previewSource} className={iframeStyle}></Preview>

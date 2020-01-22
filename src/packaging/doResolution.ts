@@ -4,7 +4,9 @@ import {
   Ok,
   Err,
   chainErrors,
-  allResult
+  allResult,
+  map,
+  unsafeUnwrap
 } from "src/functionalNonsense";
 import {
   StartOfResolution,
@@ -13,6 +15,8 @@ import {
   lockFromExplicitDeps,
   ResolutionReadyToResume
 } from "./packageResolution";
+import { normalizePath } from "src/normalizedPath";
+import { fetchFileFromUnpkg } from "./bundling";
 
 const assertNotNull = <T>(t: T | undefined | null): T => {
   if (t === null || t === undefined) {
@@ -132,3 +136,26 @@ const findMatchingVersionForSemverRange = async (
 //       .catch((e: any) => err(`Fetch ${url} failed: ${e}`));
 //   }
 // );
+
+export const fetchPackageJsons = (
+  lock: DepsLock
+): Promise<Result<Map<string, PackageJSON>, string>> =>
+  Promise.all(
+    Object.entries(lock).map(
+      async ([specifier, version]): Promise<
+        Result<[string, PackageJSON], string>
+      > => {
+        const name = specifier.substring(0, specifier.indexOf("@"));
+        return await fetchFileFromUnpkg({
+          type: "node_module",
+          name,
+          version,
+          path: unsafeUnwrap(normalizePath("package.json"))
+        }).then(result =>
+          map(result, s => [`${name}@${version}`, JSON.parse(s)])
+        );
+      }
+    )
+  )
+    .then(allResult)
+    .then(pairs => map(pairs, ps => new Map(ps)));
