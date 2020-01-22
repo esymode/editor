@@ -10,7 +10,6 @@
     "sourceMap": true,
     "lib": ["webworker", "dom", "es2019.object"],
     "moduleResolution": "node",
-    "esModuleInterop": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitAny": true,
