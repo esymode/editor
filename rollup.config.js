@@ -13,55 +13,53 @@ import css from "rollup-plugin-css-only";
 const production = !process.env.ROLLUP_WATCH;
 // process.env.NODE_ENV = "development";
 
-export default [{ entry: ["main", "src/main.tsx"], format: "esm" }].map(
-  ({ entry: [name, path], format }) => ({
-    input: {
-      [name]: path
-      // "editor.worker":
-      //   "node_modules/monaco-editor/esm/vs/editor/editor.worker.js",
-      // "json.worker":
-      //   "node_modules/monaco-editor/esm/vs/language/json/json.worker",
-      // // "css.worker": "node_modules/monaco-editor/esm/vs/language/css/css.worker",
-      // // "html.worker": "node_modules/monaco-editor/esm/vs/language/html/html.worker",
-      // "ts.worker":
-      //   "node_modules/monaco-editor/esm/vs/language/typescript/ts.worker"
-    },
-    output: {
-      dir: "dist",
-      format,
-      sourcemap: true
-    },
-    plugins: [
-      replace({
-        "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV),
-        "process.env.CI": JSON.stringify(process.env.CI)
-      }),
-      ts(),
-      resolve({}),
-      commonjs({
-        namedExports: {
-          react: [
-            "Children",
-            "Component",
-            "PropTypes",
-            "useState",
-            "useEffect",
-            "useLayoutEffect",
-            "useContext",
-            "useRef",
-            "useMemo",
-            "useReducer",
-            "Fragment",
-            "createContext",
-            "createElement"
-          ],
-          "react-dom": ["render"]
-        }
-      }),
-      // converts date-fns to ES modules
-      production && terser(), // minify, but only in production
-      // linaria({ sourceMap: process.env.NODE_ENV !== "production" }),
-      css({ output: "dist/styles.css" })
-    ]
-  })
-);
+export default {
+  input: {
+    main: "src/main.tsx"
+    // "editor.worker":
+    //   "node_modules/monaco-editor/esm/vs/editor/editor.worker.js",
+    // "json.worker":
+    //   "node_modules/monaco-editor/esm/vs/language/json/json.worker",
+    // // "css.worker": "node_modules/monaco-editor/esm/vs/language/css/css.worker",
+    // // "html.worker": "node_modules/monaco-editor/esm/vs/language/html/html.worker",
+    // "ts.worker":
+    //   "node_modules/monaco-editor/esm/vs/language/typescript/ts.worker"
+  },
+  output: {
+    dir: "dist",
+    format: "esm",
+    sourcemap: true
+  },
+  plugins: [
+    replace({
+      "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV),
+      "process.env.CI": JSON.stringify(process.env.CI)
+    }),
+    ts(),
+    resolve({}),
+    commonjs({
+      namedExports: {
+        react: [
+          "Children",
+          "Component",
+          "PropTypes",
+          "useState",
+          "useEffect",
+          "useLayoutEffect",
+          "useContext",
+          "useRef",
+          "useMemo",
+          "useReducer",
+          "Fragment",
+          "createContext",
+          "createElement"
+        ],
+        "react-dom": ["render"]
+      }
+    }),
+    // converts date-fns to ES modules
+    production && terser(), // minify, but only in production
+    // linaria({ sourceMap: process.env.NODE_ENV !== "production" }),
+    css({ output: "dist/styles.css" })
+  ]
+};
