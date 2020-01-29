@@ -1,5 +1,5 @@
-import t from "typescript";
-import { Result, Err, Ok } from "src/functionalNonsense";
+import * as t from "typescript";
+import { Result, Err, Ok } from "../src/functionalNonsense";
 
 type Observable<T> = {
   subscribe: (cb: (t: T) => void) => { unsubscribe: () => void };
