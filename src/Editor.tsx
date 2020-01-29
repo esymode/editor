@@ -20,6 +20,7 @@ import { projectPickerRoute } from "./routes";
 import { Redirect } from "./NavigationPrimitives";
 import { bundle } from "./packaging/bundling";
 import { TsWorkerContext } from "./TsWorkerContext";
+import { Vec } from "ts-binary-types";
 
 export const IDE: React.FC<{ projId: string }> = ({ projId }) => {
   const apiClient = useContext(ApiContext);
@@ -81,7 +82,7 @@ const ProjectWorkspace: React.FC<{
               const { depsLock, savedPackageJsons } = projectModel;
 
               // TODO: Handle nested files
-              const files = unsafeGetItem(
+              const tsFiles = unsafeGetItem(
                 projectModel.folders,
                 projectModel.rootId
               )
@@ -90,14 +91,22 @@ const ProjectWorkspace: React.FC<{
                   const name = unsafeGetItem(projectModel.files, fileId).name;
                   const content = unsafeGetItem(projectModel.sources, fileId);
                   return {
-                    // TODO: Add TS transpilation.
-                    name: name.substring(0, name.length - 2) + "js",
+                    name,
                     content
                   };
                 });
 
+              const jsFiles = await tsWorkerClient.compile({
+                entry: "index.ts",
+                files: tsFiles
+              });
+              if (jsFiles.tag !== "Ok") {
+                console.error("TSC failed: ", jsFiles.val);
+                return;
+              }
+
               const output = await bundle(
-                files,
+                jsFiles.val,
                 "index.js",
                 depsLock,
                 savedPackageJsons,
