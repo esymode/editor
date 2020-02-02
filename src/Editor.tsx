@@ -4,12 +4,6 @@ import { useContext, useEffect, useState, useReducer } from "react";
 import { css } from "emotion";
 
 import { isFile, unsafeGetItem } from "./projectModel";
-import { doPackageResolution } from "./packaging/doResolution";
-import { DepsLock } from "./workspace";
-import { PackageJSON } from "./packaging/packageResolution";
-import { fetchFileFromUnpkg, bundle } from "./packaging/bundling";
-import { unsafeUnwrap, map, Result, allResult } from "./functionalNonsense";
-import { normalizePath } from "./normalizedPath";
 import { FilesPanel } from "./sidePanel/FilesPanel";
 import {
   updateProjectModel,
@@ -24,6 +18,7 @@ import { IconBtn } from "./styles";
 import { FaSave } from "react-icons/fa";
 import { projectPickerRoute } from "./routes";
 import { Redirect } from "./NavigationPrimitives";
+import { bundle } from "./packaging/bundling";
 
 export const IDE: React.FC<{ projId: string }> = ({ projId }) => {
   const apiClient = useContext(ApiContext);

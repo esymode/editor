@@ -79,10 +79,10 @@ export function useMachine<
   //   });
 
   useEffect(() => {
-    instance.listenChanges(setCurrent);
-    // return () => {
-    //   instance.stop();
-    // };
+    instance.listenChanges(setCurrent).start();
+    return () => {
+      instance.stop();
+    };
   }, []);
 
   return [current, instance.send, instance];

@@ -2,11 +2,12 @@
 
 type EffectDecl<Arg, Data> = [Arg, Data] & { readonly phantom: unique symbol };
 
-type Effect<Type extends string, Arg, Data> = {
+interface Effect<Type extends string, Arg, Data> {
+  type: "effect";
   name: Type;
   arg: Arg;
   phantomRes?: Data; // this is just to remember type. It is not actually there
-};
+}
 
 const EFFECT_TOKEN = "this is effect";
 
@@ -34,16 +35,21 @@ export const declareEffects = <Desc extends DescObj>(
   Object.fromEntries(
     Object.entries(desc).map(([name]) => [
       name,
-      (arg: unknown): Effect<string, unknown, unknown> => ({ name, arg })
+      (arg: unknown): Effect<string, unknown, unknown> => ({
+        name,
+        arg,
+        type: "effect"
+      })
     ])
   ) as any;
 
 export type AnyEffectsDeclaration = ReturnType<typeof declareEffects>;
 
-type Command<Type extends string, Arg, Data, Ev> = [
-  Effect<Type, Arg, Data>,
-  (data: Data) => Ev
-];
+type Command<Type extends string, Arg, Data, Ev> = {
+  type: "cmd";
+  eff: Effect<Type, Arg, Data>;
+  createEv: (data: Data) => Ev;
+};
 
 type AnyCommandObjectForm<Effects extends AnyEffectsDeclaration, Ev> = {
   [K in keyof Effects]: Effects[K] extends (
@@ -53,6 +59,22 @@ type AnyCommandObjectForm<Effects extends AnyEffectsDeclaration, Ev> = {
     : never;
 };
 
+type AnyEffectObjectForm<Effects extends AnyEffectsDeclaration> = {
+  [K in keyof Effects]: Effects[K] extends (
+    arg: infer Arg
+  ) => Effect<infer Type, infer Arg, infer Data>
+    ? Effect<Type, Arg, Data>
+    : never;
+};
+
+type AnyEffect<Effects extends AnyEffectsDeclaration> = AnyEffectObjectForm<
+  Effects
+>[keyof AnyEffectObjectForm<Effects>];
+
+const isEffect = <E extends Effect<any, any, any>>(
+  effOrCmd: E | AnyCommand<any, any>
+): effOrCmd is E => "type" in effOrCmd && effOrCmd.type === "effect";
+
 export type AnyCommand<
   Effects extends AnyEffectsDeclaration,
   Ev
@@ -60,13 +82,15 @@ export type AnyCommand<
 
 export const cmd = <Type extends string, Arg, Data, Ev>(
   eff: Effect<Type, Arg, Data>,
-  f: (data: Data) => Ev
-): Command<Type, Arg, Data, Ev> => [eff, f];
+  createEv: (data: Data) => Ev
+): Command<Type, Arg, Data, Ev> => ({ eff, createEv, type: "cmd" });
 
 export type UpdateFunction<State, Ev, Effects extends AnyEffectsDeclaration> = (
   prev: State,
   ev: Ev
-) => [State, AnyCommand<Effects, Ev>?];
+) => [State, (AnyCommand<Effects, Ev> | AnyEffect<Effects>)?];
+
+// type OnlyStrinKeys<T> = keyof T extends string? ;
 
 export type EffectHandler<
   Effects extends AnyEffectsDeclaration,
@@ -78,6 +102,12 @@ export type EffectHandler<
       : never
     : never;
 };
+
+// const E = declareEffects({
+//   e: effect<() => void>()
+// });
+
+// type t = AnyEffect<typeof E>;
 
 export function instantiate<State, Ev, Effects extends AnyEffectsDeclaration>(
   update: UpdateFunction<State, Ev, Effects>,
@@ -106,13 +136,18 @@ export function instantiate<
   effectHandler: EffectHandler<Effects, Context>,
   context?: Context
 ): MachineInstance<State, Ev> {
-  let [state, command] = init();
+  let state: State;
+  let command: AnyCommand<Effects, Ev> | AnyEffect<Effects> | undefined;
+  [state, command] = init();
 
   let listeners: ((state: State) => void)[] = [];
   let started = false;
+  let generation = 0;
 
-  function handleEv(ev: Ev) {
-    if (!started) return;
+  function handleEv(ev: Ev, gen: number) {
+    // this is to skip stale promise handlers after stop/start
+    if (!started || gen !== generation) return;
+
     const prevState = state;
     [state, command] = update(state, ev);
     const wasUpdated = prevState !== state;
@@ -125,7 +160,8 @@ export function instantiate<
     if (command) runCmd(command);
   }
 
-  function runCmd([eff, createEv]: AnyCommand<Effects, Ev>) {
+  function runCmd(effOrCmd: AnyCommand<Effects, Ev> | AnyEffect<Effects>) {
+    const eff = isEffect(effOrCmd) ? effOrCmd : effOrCmd.eff;
     const { name, arg } = eff;
 
     // here we trust type system to do the right thing for context
@@ -133,13 +169,20 @@ export function instantiate<
     // if it is omitted context will be undefined regardless
     const effResult = effectHandler[name](arg, context!);
 
+    if (isEffect(effOrCmd)) {
+      // we don't need to do anything else
+      return;
+    }
+
+    const { createEv } = effOrCmd;
+
     // here it can be either the data or a Promise.
     // regardless we rely on type system to make sure that effResult has the right type
     // to create an event
     if (effResult instanceof Promise) {
-      effResult.then(r => handleEv(createEv(r)));
+      effResult.then(r => handleEv(createEv(r), generation));
     } else {
-      handleEv(createEv(effResult));
+      handleEv(createEv(effResult), generation);
     }
   }
 
@@ -153,13 +196,22 @@ export function instantiate<
       return instance;
     },
 
+    stop: () => {
+      if (!started) return instance;
+      started = false;
+      generation += 1;
+      command = undefined;
+      return instance;
+    },
+
     send: ev => {
-      handleEv(ev);
+      handleEv(ev, generation);
       return instance;
     },
 
     listenChanges: listener => {
-      listeners.push(listener);
+      // this is to avoid iterator corruption
+      listeners = listeners.concat(listener);
       return instance;
     },
 
@@ -181,13 +233,9 @@ export interface MachineInstance<
   getState: () => State;
 
   start: () => MachineInstance<State, Ev>;
-  //   stop: () => MachineInstance<State, Ev>;
+  stop: () => MachineInstance<State, Ev>;
 
   send: (ev: Ev) => MachineInstance<State, Ev>;
-
-  //   run: (
-  //     command: AnyCommand<Effects, Ev>
-  //   ) => MachineInstance<State, Ev>;
 
   listenChanges: (
     listener: (state: State) => void
